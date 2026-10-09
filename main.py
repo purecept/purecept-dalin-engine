@@ -1,10 +1,20 @@
 import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 from tavily import TavilyClient
 
 app = FastAPI(title="Purecept - Dalin Engine")
+
+# Tarayıcıdan ve arayüzden gelen isteklere izin ver (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 gemini_key = os.environ.get("GEMINI_API_KEY")
 tavily_key = os.environ.get("TAVILY_API_KEY")
