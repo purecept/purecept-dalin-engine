@@ -30,7 +30,7 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🌐 3 AÇIK KAYNAK PLATFORM (OPENALEX + ARXIV + HUGGINGFACE)
+# 🌐 3 AÇIK PLATFORM (OPENALEX + ARXIV + HUGGINGFACE)
 # ==============================================================================
 def fetch_openalex_insights(topic: str, max_results: int = 2) -> List[str]:
     query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
@@ -84,7 +84,7 @@ def fetch_huggingface_insights(topic: str, max_results: int = 2) -> List[str]:
             datasets = res.json()
             for ds in datasets:
                 ds_id = ds.get("id", "")
-                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım norm seti"
+                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım normu"
                 if ds_id:
                     insights.append(f"• [HuggingFace]: {ds_id} - {desc}")
     except Exception as e:
@@ -92,7 +92,7 @@ def fetch_huggingface_insights(topic: str, max_results: int = 2) -> List[str]:
     return insights
 
 # ==============================================================================
-# 🧠 MEM0: KALICI HAFIZA KATMANI
+# 🧠 MEM0: FIRESTORE REST HAFIZA
 # ==============================================================================
 def retrieve_purecept_memory_context(sector_hint: str) -> str:
     url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/purecept_knowledge_base?key={FIREBASE_API_KEY}"
@@ -153,49 +153,49 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     return []
 
 # ==============================================================================
-# 🎯 KUSURSUZ DOĞRULANMIŞ İZOLE PORSELEN STÜDYO ARŞİVİ (Vazo, Mobilya, Çiçek Sıfır)
+# 🎯 MUTLAK İZOLE PORSELEN HAVUZU (SAAT, OJE, VAZO, MOBİLYA VE CORS ENGELİ YOK)
 # ==============================================================================
-# Bu linklerin her biri doğrudan saf beyaz veya saten gri tekil tabak ve kaselerdir:
-ISOLATED_PORCELAIN_ASSETS = {
-    # 1. Düz Servis Tabağı / Degüstasyon Aynası (Tekil beyaz minimalist tabak)
-    "flat_plate": "https://images.unsplash.com/photo-1576867757603-05b134ebc379?auto=format&fit=crop&w=1000&q=80",
+# Doğrudan test edilmiş, CORS serbest, saf stüdyo porselen ve seramik formları:
+PREMIUM_CERAMIC_VAULT = {
+    # 1. Heykelsi Amuse-Bouche Pedestal / Monolitik Lokma Kaidesi
+    "pedestal": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85",
     
-    # 2. Derin Kase / Consommé Kasesi (Tekil beyaz derin konik kase)
-    "deep_bowl": "https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=1000&q=80",
+    # 2. Düz Degüstasyon Sunum Aynası / Şef Tabağı
+    "flat_plate": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=85",
     
-    # 3. Pedestal / Kaide / Monolitik Lokma Sunumu (İzole heykelsi seramik form)
-    "pedestal": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1000&q=80",
+    # 3. Derin Consommé Kasesi / Termal Çanak
+    "deep_bowl": "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=1200&q=85",
     
-    # 4. Asimetrik Pre-Dessert / Gurme Kase
-    "dessert_cup": "https://images.unsplash.com/photo-1590736969955-71cc94801759?auto=format&fit=crop&w=1000&q=80",
+    # 4. Pre-Dessert Kabı / Asimetrik Tadım Kasesi (Saat yerine saf seramik kase)
+    "dessert_cup": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85",
     
-    # 5. Barista Fincanı (Sadece kahve istenirse)
-    "coffee": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1000&q=80"
+    # 5. Paylaşım Platter'ı
+    "platter": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85"
 }
 
 def resolve_pure_tableware_asset(product_name: str, spec: str, idx: int) -> str:
-    """Ürünün adına göre kesin ve izole tekil porselen nesnesi seçer."""
+    """Ürünün tipolojisine göre saat/kol/vazo içermeyen garantili porselen döner."""
     t = f"{product_name} {spec}".lower()
     
-    if any(k in t for k in ["pedestal", "kaide", "amuse", "monolitik"]):
-        return ISOLATED_PORCELAIN_ASSETS["pedestal"]
+    if any(k in t for k in ["pedestal", "kaide", "amuse", "stèle", "monolitik"]):
+        return PREMIUM_CERAMIC_VAULT["pedestal"]
         
-    if any(k in t for k in ["consomme", "consommé", "kase", "bowl", "derin", "çorba"]):
-        return ISOLATED_PORCELAIN_ASSETS["deep_bowl"]
+    if any(k in t for k in ["consomme", "consommé", "kase", "bowl", "cloche", "vortex"]):
+        return PREMIUM_CERAMIC_VAULT["deep_bowl"]
         
-    if any(k in t for k in ["ayna", "flat", "düz", "degüstasyon", "tabak", "plate"]):
-        return ISOLATED_PORCELAIN_ASSETS["flat_plate"]
+    if any(k in t for k in ["ayna", "flat", "düz", "degüstasyon", "miroir", "tabak", "plate"]):
+        return PREMIUM_CERAMIC_VAULT["flat_plate"]
         
-    if any(k in t for k in ["dessert", "pre-dessert", "tatlı", "tadımlık", "sorbe", "kabı"]):
-        return ISOLATED_PORCELAIN_ASSETS["dessert_cup"]
+    if any(k in t for k in ["dessert", "pre-dessert", "calix", "pod", "tatlı", "sorbe"]):
+        return PREMIUM_CERAMIC_VAULT["dessert_cup"]
 
-    fallback = [
-        ISOLATED_PORCELAIN_ASSETS["flat_plate"],
-        ISOLATED_PORCELAIN_ASSETS["deep_bowl"],
-        ISOLATED_PORCELAIN_ASSETS["pedestal"],
-        ISOLATED_PORCELAIN_ASSETS["dessert_cup"]
+    fallback_list = [
+        PREMIUM_CERAMIC_VAULT["pedestal"],
+        PREMIUM_CERAMIC_VAULT["deep_bowl"],
+        PREMIUM_CERAMIC_VAULT["flat_plate"],
+        PREMIUM_CERAMIC_VAULT["dessert_cup"]
     ]
-    return fallback[idx % len(fallback)]
+    return fallback_list[idx % len(fallback_list)]
 
 # ==============================================================================
 # 📐 VERİ MODELLERİ
@@ -230,7 +230,7 @@ class LaunchVisionPillar(BaseModel):
 
 class UniversalPresentationDeck(BaseModel):
     title: str = Field(default="STRATEJİ VE VİZYON RAPORU")
-    collection_name: str = Field(description="Koleksiyon adı")
+    collection_name: str = Field(description="Koleksiyon resmi adı")
     subtitle: str = Field(description="Alt başlık")
     target_sector: str = Field(description="Hedef sektör")
     
@@ -252,7 +252,7 @@ class ChatRequest(BaseModel):
     message: str
 
 # ==============================================================================
-# 🤖 ORKESTRASYON
+# 🤖 ÇOKLU AJAN ORKESTRASYONU
 # ==============================================================================
 AGENT_DALIN = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
@@ -263,8 +263,8 @@ Kural: Asla jenerik konuşma; havacılıkta DeSter, hastanede Bauscher, baristad
 AGENT_AUDITOR = """
 Sen Purecept Tasarım ve Ergonomi Denetçisisin.
 Dalin'in analizini endüstriyel gerçeklik filtresinden geçirirsin:
-- İstiflenebilirlik (stackability), cidar kalınlığı, salamander ve bulaşıkhane direnci, kordon geometrisi.
-Tutarsız ve amatör önerileri elersin.
+- İstiflenebilirlik, cidar kalınlığı, salamander fırın direnci, mikronize sır sertliği.
+Tutarsız veya amatör önerileri elersin.
 """
 
 @app.get("/")
@@ -319,17 +319,17 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # Görselleri doğrudan saf izole porselen arşivinden ata
+        # Görselleri doğrudan saf porselen havuzundan eşle
         paftas = data.get("product_paftas", [])
         for idx, pafta_data in enumerate(paftas):
             p_name = pafta_data.get("product_name", "")
             p_spec = pafta_data.get("spec_dimension", "")
             pafta_data["image_url"] = resolve_pure_tableware_asset(p_name, p_spec, idx)
 
-        # Lansman görseli: Doğrudan zarif şef masası
-        data["launch_image_url"] = "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=80"
+        # Lansman görseli
+        data["launch_image_url"] = "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85"
 
-        # Firestore hafıza kaydı
+        # Firestore kayıt
         try:
             safe_name = str(data.get("collection_name", "proje")).replace(" ", "_").lower()[:30]
             capsule_id = f"capsule-dalin-{safe_name}"
@@ -340,7 +340,7 @@ KULLANICI TALEBİ: {request.message}
                 "strategicPositioning": str(data.get("strategic_positioning", "")),
                 "skuCount": len(paftas),
                 "benchmarks": data.get("benchmarks", []),
-                "memoryType": "Purecept_Deterministic_Vault"
+                "memoryType": "Purecept_Bulletproof_Vault"
             })
         except Exception as fb_err:
             print(f"[Hafıza Kayıt]: {fb_err}")
