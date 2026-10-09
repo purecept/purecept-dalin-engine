@@ -1,6 +1,5 @@
 import os
 import json
-import urllib.parse
 import requests
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -18,9 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==============================================================================
-# 🔑 API VE SERVİS YAPILANDIRMASI
-# ==============================================================================
+# API ve Servis Bilgileri
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
 
@@ -30,10 +27,9 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🧠 MEM0 MİMARİSİ: KALICI HİYERARŞİK STÜDYO HAFIZASI (FIRESTORE REST)
+# 🧠 MEM0 MİMARİSİ: FIRESTORE REST HAFIZA KATMANI
 # ==============================================================================
 def retrieve_purecept_memory_context(sector_hint: str) -> str:
-    """Firestore'da daha önce öğrenilmiş kuralları ve sektör normlarını çeker."""
     url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/purecept_knowledge_base?key={FIREBASE_API_KEY}"
     try:
         res = requests.get(url, timeout=5)
@@ -46,15 +42,14 @@ def retrieve_purecept_memory_context(sector_hint: str) -> str:
                 topic = fields.get("topic", {}).get("stringValue", "")
                 strat = fields.get("strategicPositioning", {}).get("stringValue", "")
                 if sector_hint.lower() in sec or sector_hint.lower() in topic.lower():
-                    memory_rules.append(f"• [Önceki Hafıza / {topic}]: {strat[:200]}")
+                    memory_rules.append(f"• [{topic}]: {strat[:200]}")
             if memory_rules:
-                return "\n[STÜDYO HAFIZASI & ÖNCEKİ DENEYİMLER (MEM0)]:\n" + "\n".join(memory_rules[:3])
+                return "\n[STÜDYO HAFIZASI (MEM0)]:\n" + "\n".join(memory_rules[:3])
     except Exception as e:
-        print(f"[HAFIZA OKUMA UYARISI]: {e}")
+        print(f"[HAFIZA OKUMA HATASI]: {e}")
     return ""
 
 def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
-    """Öğrenilen yeni sektörel normları Firestore hafızasına kalıcı olarak yazar."""
     url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/purecept_knowledge_base/{capsule_id}?key={FIREBASE_API_KEY}"
     fields = {}
     for k, v in payload.items():
@@ -68,10 +63,10 @@ def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
     try:
         requests.patch(url, json={"fields": fields}, timeout=6)
     except Exception as e:
-        print(f"[HAFIZA YAZMA UYARISI]: {e}")
+        print(f"[HAFIZA YAZMA HATASI]: {e}")
 
 # ==============================================================================
-# 🔍 EXA AI NEURAL SEARCH (ANLAMSAL ARAMA MOTORU)
+# 🔍 EXA AI NEURAL SEARCH
 # ==============================================================================
 def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     if not exa_key:
@@ -90,52 +85,73 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
         if res.status_code == 200:
             return res.json().get("results", [])
     except Exception as e:
-        print(f"[EXA AI UYARISI]: {e}")
+        print(f"[EXA AI HATASI]: {e}")
     return []
 
 # ==============================================================================
-# 🖼️ DİNAMİK EDİTORYAL GÖRSEL KÜTÜPHANESİ (TİPOLOJİ VE SEKTÖRE DUYARLI)
+# 🖼️ SAF PORSELEN VE EDİTORYAL ÜRÜN KÜTÜPHANESİ (YEMEKSİZ & STÜDYO ÇEKİMİ)
 # ==============================================================================
-def resolve_dynamic_editorial_image(sector: str, product_name: str, spec: str, fallback_idx: int) -> str:
-    """Ürünün tipolojisine göre doğru editoryal stüdyo fotoğrafını seçer (Kahve tuzağını engeller)."""
-    combined = f"{sector} {product_name} {spec}".lower()
+# Asla kaburga, et, patates veya vazo içermeyen doğrulanmış porselen/seramik ürünleri:
+STUDIO_PORCELAIN_ASSETS = {
+    # 1. Düz Şef Servis Aynası / Düz Tabak / Fine-Dining Platter
+    "flat_plate": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85",
+    # 2. Derin Kase / Infusion Kasesi / Çorba Haznesi
+    "deep_bowl": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85",
+    # 3. Heykelsi Monolitik Kaide / Amuse-Bouche Pedestal / Tadım Tabağı
+    "pedestal": "https://images.unsplash.com/photo-1615529182904-14819c35db37?auto=format&fit=crop&w=1200&q=85",
+    # 4. Asimetrik Gurme Tabak / Organik Formlu Porselen
+    "organic_plate": "https://images.unsplash.com/photo-1590736969955-71cc94801759?auto=format&fit=crop&w=1200&q=85",
+    # 5. Pre-Dessert / Coupelle / Tatlı Kasesi
+    "dessert_coupelle": "https://images.unsplash.com/photo-1576020799627-aeac76d580dc?auto=format&fit=crop&w=1200&q=85",
+    # 6. Oval Paylaşım Platter'ı / Geniş Servis
+    "oval_platter": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85",
+    # 7. Barista / Kahve Fincanı (Sadece kahve istendiğinde)
+    "coffee_cup": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=85"
+}
+
+def resolve_pristine_tableware_image(sector: str, name: str, spec: str, idx: int) -> str:
+    """Yemek/et fotoğraflarını engelleyen doğrudan saf porselen nesne seçici."""
+    text = f"{sector} {name} {spec}".lower()
     
-    # 1. Kase / Bowl
-    if any(k in combined for k in ["kase", "bowl", "çorba", "soup", "hazne", "derin"]):
-        return "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85"
-    
-    # 2. Degüstasyon / Şef / Gourmet Tabağı
-    if any(k in combined for k in ["degüstasyon", "tasting", "ana yemek", "dinner", "gourmet", "düz sunum"]):
-        return "https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=1200&q=85"
-    
-    # 3. Paylaşım Platter'ı / Oval Tepsi / Meze Sunumu
-    if any(k in combined for k in ["platter", "paylaşım", "oval", "tepsi", "tray", "servis tabağı", "kayık"]):
-        return "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85"
-    
-    # 4. Starter / Başlangıç / Yan Tabak
-    if any(k in combined for k in ["starter", "başlangıç", "side", "tabak", "plate", "meze"]):
-        return "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85"
-    
-    # 5. Sadece ve sadece barista/kahve fincanı istenmişse fincan ver
-    if any(k in combined for k in ["kahve", "coffee", "espresso", "latte", "flat white", "cappuccino", "kupa", "mug", "fincan"]):
-        coffee_pool = [
-            "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=85",
-            "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=1200&q=85",
-            "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=85"
-        ]
-        return coffee_pool[fallback_idx % len(coffee_pool)]
-    
-    # Genel Lüks Seramik Ürün Arşivi
-    curated_minimal = [
-        "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85",
-        "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85",
-        "https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=1200&q=85",
-        "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85"
+    # Kahve Fincaları (Sadece kahve projesiyse)
+    if any(k in text for k in ["espresso", "cappuccino", "latte", "flat white", "barista", "fincan", "kupa"]):
+        return STUDIO_PORCELAIN_ASSETS["coffee_cup"]
+
+    # Amuse-Bouche / Kaide / Pedestal / Caviar
+    if any(k in text for k in ["amuse", "pedestal", "kaide", "caviar", "kule", "monolitik"]):
+        return STUDIO_PORCELAIN_ASSETS["pedestal"]
+        
+    # Pre-Dessert / Tatlı / Coupelle / Finale
+    if any(k in text for k in ["dessert", "tatlı", "coupelle", "finale", "sorbe", "cocoon"]):
+        return STUDIO_PORCELAIN_ASSETS["dessert_coupelle"]
+
+    # Derin Kase / Çorba / Infusion / Kuyu
+    if any(k in text for k in ["kase", "bowl", "infusion", "çorba", "derin kuyu", "deep well"]):
+        return STUDIO_PORCELAIN_ASSETS["deep_bowl"]
+
+    # Oval Platter / Paylaşım / Geniş Tepsi
+    if any(k in text for k in ["platter", "paylaşım", "oval", "tepsi", "servis"]):
+        return STUDIO_PORCELAIN_ASSETS["oval_platter"]
+
+    # Asimetrik Düz Tabak / Degüstasyon / Şef Aynası
+    if any(k in text for k in ["asymmetric", "asimetrik", "organik"]):
+        return STUDIO_PORCELAIN_ASSETS["organic_plate"]
+
+    # Standart Düz Tabak / Main Course / Flat Plate
+    if any(k in text for k in ["flat", "tabak", "plate", "starter", "ana yemek", "degüstasyon", "ayna"]):
+        return STUDIO_PORCELAIN_ASSETS["flat_plate"]
+
+    # Döngüsel Güvenli Liste
+    safe_rotation = [
+        STUDIO_PORCELAIN_ASSETS["flat_plate"],
+        STUDIO_PORCELAIN_ASSETS["deep_bowl"],
+        STUDIO_PORCELAIN_ASSETS["pedestal"],
+        STUDIO_PORCELAIN_ASSETS["dessert_coupelle"]
     ]
-    return curated_minimal[fallback_idx % len(curated_minimal)]
+    return safe_rotation[idx % len(safe_rotation)]
 
 # ==============================================================================
-# 📐 DİNAMİK SUNUM VE PAFTA VERİ ŞEMALARI (SINIRSIZ SKU & TİPOLOJİ)
+# 📐 DİNAMİK SUNUM VE PAFTA VERİ ŞEMALARI
 # ==============================================================================
 class TrendCard(BaseModel):
     title: str = Field(description="Trend başlığı")
@@ -171,20 +187,16 @@ class UniversalPresentationDeck(BaseModel):
     subtitle: str = Field(description="Alt başlık ve stratejik hedef tanımı")
     target_sector: str = Field(description="Hedef sektör")
     
-    # Slayt 2: Dinamikler & Renk
     trends_title: str = Field(default="Tüketim Dinamikleri & Pazar Trendleri")
     trends_subtitle: str = Field(default="Deneyimi şekillendiren mikro dinamikler ve renk kartelası.")
     trends: List[TrendCard]
     trend_colors: List[TrendColor]
     
-    # Slayt 3: Benchmark & Konumlandırma
     benchmarks: List[BenchmarkAnalysisItem]
     strategic_positioning: str = Field(description="Tek paragraf vurucu stratejik konumlandırma tezi")
     
-    # Slayt 4+: Dinamik SKU Paftaları
     product_paftas: List[DynamicProductPafta]
     
-    # Son Slayt: Lansman & Saha
     launch_title: str = Field(default="Saha Lansman ve Entegrasyon Vizyonu")
     launch_pillars: List[LaunchVisionPillar]
     launch_image_url: Optional[str] = Field(default=None)
@@ -193,12 +205,12 @@ class ChatRequest(BaseModel):
     message: str
 
 # ==============================================================================
-# 🤖 ÇOKLU AJAN (MULTI-AGENT DEBATE) VE ORKESTRASYON PROMPTLARI
+# 🤖 ÇOKLU AJAN (MULTI-AGENT DEBATE)
 # ==============================================================================
 AGENT_DALIN_RESEARCHER = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
 Görevin: Kullanıcının girdiği sektörü analiz etmek, Exa AI pazar istihbaratını okumak ve bu sektörün dünyadaki gerçek pazar liderlerini (Benchmark) tespit ederek boşlukları çıkarmak.
-Kural: Asla jenerik konuşma; havacılık ise DeSter/Kaelis, hastane ise Bauscher/Schönwald, barista ise ACME/Loveramics, fine-dining ise Revol/Bernardaud, lüks marin ise Bernardaud/Haviland/Robbe & Berking üzerinden git.
+Kural: Asla jenerik konuşma; havacılık ise DeSter/Kaelis, hastane ise Bauscher/Schönwald, barista ise ACME/Loveramics, fine-dining ise Revol/Bernardaud/Hering Berlin üzerinden git.
 """
 
 AGENT_AUDITOR_FILTER = """
@@ -214,7 +226,7 @@ Saçma, uydurma veya tutarsız önerileri reddedip rafine hale getirirsin.
 def root():
     return {
         "status": "online",
-        "agent": "Dalin (Multi-Agent Debate & Dynamic Editorial Vision)",
+        "agent": "Dalin (Multi-Agent Debate & Pristine Ceramic Assets)",
         "studio": "Purecept Design Studio"
     }
 
@@ -223,16 +235,16 @@ def chat(request: ChatRequest):
     if not gemini_client:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY eksik.")
 
-    # 1. ADIM: Hafızadan (Mem0 / Firestore) geçmiş deneyimleri tara
+    # 1. Hafıza Taraması (Mem0)
     memory_context = retrieve_purecept_memory_context(request.message[:40])
 
-    # 2. ADIM: Exa AI ile canlı anlamsal araştırma
-    neural_insights = exa_neural_search(f"industrial design technical specifications standards {request.message}", num_results=2)
+    # 2. Exa AI Canlı Derin Pazar Araması
+    neural_insights = exa_neural_search(f"tableware ergonomics porcelain standards {request.message}", num_results=2)
     research_context = ""
     if neural_insights:
         research_context = "\n[EXA AI CANLI SEKTÖREL İSTİHBARAT]:\n" + "\n".join([f"- {r.get('title')}: {r.get('text', '')[:300]}" for r in neural_insights])
 
-    # 3. ADIM: Çoklu Ajan Konsensüsü ve Sunum Üretimi
+    # 3. Orkestrasyon
     orchestration_prompt = f"""
 {AGENT_DALIN_RESEARCHER}
 
@@ -261,28 +273,28 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # 4. ADIM: Tipoloji ve Sektöre Göre Kusursuz Görsel Eşleme (Fincan tuzağını yıkar)
+        # 4. Saf Porselen Görsellerini Eşle (Fast-food/kaburga tamamen engellendi)
         paftas = data.get("product_paftas", [])
         sec = data.get("target_sector", "")
         for idx, pafta_data in enumerate(paftas):
             p_name = pafta_data.get("product_name", "")
             p_spec = pafta_data.get("spec_dimension", "")
-            pafta_data["image_url"] = resolve_dynamic_editorial_image(sec, p_name, p_spec, idx)
+            pafta_data["image_url"] = resolve_pristine_tableware_image(sec, p_name, p_spec, idx)
 
-        # Lansman Mekanı: Sektöre uygun mimari mekan görseli
+        # Lansman Mekanı: Sektöre uygun mimari alan
         sec_lower = str(sec).lower()
-        if any(w in sec_lower for w in ["yat", "yacht", "marin", "marine", "deniz", "nautica"]):
+        if any(w in sec_lower for w in ["yat", "yacht", "marin", "marine", "deniz"]):
             data["launch_image_url"] = "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?auto=format&fit=crop&w=1200&q=85"
-        elif any(w in sec_lower for w in ["hastane", "hospital", "sağlık", "care", "medikal"]):
+        elif any(w in sec_lower for w in ["hastane", "hospital", "sağlık", "medikal"]):
             data["launch_image_url"] = "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=85"
-        elif any(w in sec_lower for w in ["uçak", "aviation", "flight", "air", "in-flight"]):
+        elif any(w in sec_lower for w in ["uçak", "aviation", "flight", "air"]):
             data["launch_image_url"] = "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=85"
         elif any(w in sec_lower for w in ["fine-dining", "gastronomi", "şef", "chef", "restoran"]):
             data["launch_image_url"] = "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85"
         else:
             data["launch_image_url"] = "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=85"
 
-        # 5. ADIM: Öğrenilen bilgiyi Mem0 katmanıyla Firestore'a işle
+        # 5. Hafıza Kaydı (Firestore REST)
         try:
             safe_name = str(data.get("collection_name", "proje")).replace(" ", "_").lower()[:30]
             capsule_id = f"capsule-dalin-{safe_name}"
