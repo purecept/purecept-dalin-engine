@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google import genai
 
-app = FastAPI(title="Purecept - Dalin Autonomous Live Intelligence Engine")
+app = FastAPI(title="Purecept - Dalin Autonomous Knowledge & Design Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,9 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==============================================================================
-# 🔑 API VE HİZMET YAPILANDIRMASI
-# ==============================================================================
+# API Yapılandırması
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
 SERPAPI_KEY = "a7d9ba3325d6f27d029c7a907e21d3495e424b0691e5027d0509a7f620f679bd"
@@ -32,43 +30,73 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🔍 SERPAPI: CANLI GOOGLE GÖRSELLER (BOT KALKANI VE ENGEL YOK)
+# 🎯 ASLA PATLAMAYAN, SADECE VE SADECE SAF PORSELEN VE TABAK ARŞİVİ
+# (Kitap, vazo, çiçek, kuru ot, yemek ve koltuk tamamen yasaklanmıştır)
 # ==============================================================================
-def search_serpapi_live_image(query: str) -> Optional[str]:
-    """Google Images üzerinden bot kalkanına takılmadan doğrudan orijinal görsel URL'si çeker."""
+GUARANTEED_TABLEWARE_ARCHIVE = {
+    # 1. Monolitik Kaide / Amuse-Bouche Pedestal (Beyaz seramik stüdyo kaidesi)
+    "pedestal": "https://images.unsplash.com/photo-1615529182904-14819c35db37?auto=format&fit=crop&w=900&q=80",
+    # 2. Derin Parabolik Consommé / Çorba Kasesi (Stüdyo derin porselen kase)
+    "bowl": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=900&q=80",
+    # 3. Düz Degüstasyon Sunum Aynası / Şef Tabağı (Minimalist düz beyaz porselen servis tabağı)
+    "plate": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=900&q=80",
+    # 4. Kriyojenik / Tadım Çanağı / Pre-Dessert Kabı (Minimalist porselen gurme kasesi)
+    "dessert": "https://images.unsplash.com/photo-1576020799627-aeac76d580dc?auto=format&fit=crop&w=900&q=80",
+    # 5. Lansman Mekanı (Michelin Restoran Loş Masa Düzeni)
+    "launch": "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=80"
+}
+
+def resolve_pristine_tableware_asset(product_name: str, spec: str) -> str:
+    """Ürün tipine göre kesin olarak porselen/tabak görseli atar."""
+    t = f"{product_name} {spec}".lower()
+    if any(k in t for k in ["pedestal", "kaide", "amuse", "monolit"]):
+        return GUARANTEED_TABLEWARE_ARCHIVE["pedestal"]
+    if any(k in t for k in ["consomme", "consommé", "kase", "bowl", "çorba", "derin", "bacalı"]):
+        return GUARANTEED_TABLEWARE_ARCHIVE["bowl"]
+    if any(k in t for k in ["ayna", "flat", "düz", "degüstasyon", "sonsuzluk", "tabak", "plate"]):
+        return GUARANTEED_TABLEWARE_ARCHIVE["plate"]
+    if any(k in t for k in ["dessert", "pre-dessert", "kriyojenik", "kapsül", "tatlı", "sorbe"]):
+        return GUARANTEED_TABLEWARE_ARCHIVE["dessert"]
+    return GUARANTEED_TABLEWARE_ARCHIVE["plate"]
+
+# ==============================================================================
+# 🔍 SERPAPI CANLI ARAMA (SIKI TABAK/PORSELEN FİLTRESİYLE)
+# ==============================================================================
+def search_serpapi_tableware(query: str, fallback_type: str) -> str:
     if not SERPAPI_KEY:
-        return None
+        return GUARANTEED_TABLEWARE_ARCHIVE.get(fallback_type, GUARANTEED_TABLEWARE_ARCHIVE["plate"])
     try:
-        # Sorguyu yemek tariflerini ve fast-food'u eleyecek şekilde filtrele
-        refined_query = f"{query} tableware white background studio photography -food -recipe"
+        # Sorguyu doğrudan seramik/porselen üretici ve ürün terimleriyle zorla
+        strict_query = f"{query} ceramic plate bowl porcelain tableware studio white background -vase -flower -book -plant -food -recipe"
         url = "https://serpapi.com/search.json"
         params = {
             "engine": "google_images",
-            "q": refined_query,
+            "q": strict_query,
             "api_key": SERPAPI_KEY,
-            "num": 5
+            "num": 3
         }
-        res = requests.get(url, params=params, timeout=6)
+        res = requests.get(url, params=params, timeout=4)
         if res.status_code == 200:
-            data = res.json()
-            images = data.get("images_results", [])
-            for img in images:
-                orig = img.get("original")
+            results = res.json().get("images_results", [])
+            for item in results:
+                title = str(item.get("title", "")).lower()
+                orig = item.get("original")
+                # Eğer başlıkta vazo, kitap, çiçek gibi kelimeler geçiyorsa çöpe at
+                if any(bad in title for bad in ["vase", "flower", "book", "plant", "salad", "recipe", "decor"]):
+                    continue
                 if orig and any(orig.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
                     return orig
-                elif orig:
-                    return orig
     except Exception as e:
-        print(f"[SerpApi Hatası]: {e}")
-    return None
+        print(f"[SerpApi Uyarısı]: {e}")
+    return GUARANTEED_TABLEWARE_ARCHIVE.get(fallback_type, GUARANTEED_TABLEWARE_ARCHIVE["plate"])
 
 # ==============================================================================
-# 🧠 MEM0 & PURECEPT FIREBASE KATALOG VE BELLEK KATMANI
+# 🧠 MEM0: KALICI STÜDYO HAFIZASI
 # ==============================================================================
 def retrieve_purecept_memory_context(sector_hint: str) -> str:
     url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/purecept_knowledge_base?key={FIREBASE_API_KEY}"
     try:
-        res = requests.get(url, timeout=5)
+        res = requests.get(url, timeout=4)
         if res.status_code == 200:
             docs = res.json().get("documents", [])
             memory_rules = []
@@ -80,7 +108,7 @@ def retrieve_purecept_memory_context(sector_hint: str) -> str:
                 if sector_hint.lower() in sec or sector_hint.lower() in topic.lower():
                     memory_rules.append(f"• [{topic}]: {strat[:200]}")
             if memory_rules:
-                return "\n[PURECEPT STÜDYO VE KATALOG HAFIZASI]:\n" + "\n".join(memory_rules[:4])
+                return "\n[STÜDYO HAFIZASI (MEM0)]:\n" + "\n".join(memory_rules[:3])
     except Exception as e:
         print(f"[Hafıza Okuma]: {e}")
     return ""
@@ -96,19 +124,19 @@ def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
         elif isinstance(v, (list, dict)):
             fields[k] = {"stringValue": json.dumps(v, ensure_ascii=False)}
     try:
-        requests.patch(url, json={"fields": fields}, timeout=5)
+        requests.patch(url, json={"fields": fields}, timeout=4)
     except Exception as e:
         print(f"[Hafıza Yazma]: {e}")
 
 # ==============================================================================
-# 🌐 AÇIK BİLGİ VE AKADEMİK PLATFORMLAR (OPENALEX + EXA AI)
+# 🌐 AÇIK BİLGİ VE AKADEMİK PLATFORMLAR
 # ==============================================================================
 def fetch_openalex_insights(topic: str) -> List[str]:
     query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
     url = f"https://api.openalex.org/works?search={query}&per-page=2"
     insights = []
     try:
-        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=4)
+        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=3)
         if res.status_code == 200:
             results = res.json().get("results", [])
             for r in results:
@@ -131,20 +159,12 @@ def exa_neural_search(query: str) -> List[Dict]:
         "type": "neural"
     }
     try:
-        res = requests.post(url, headers=headers, json=payload, timeout=5)
+        res = requests.post(url, headers=headers, json=payload, timeout=4)
         if res.status_code == 200:
             return res.json().get("results", [])
     except Exception as e:
         print(f"[Exa AI]: {e}")
     return []
-
-# Güvenli yedek görsel havuzu
-FALLBACK_PORCELAIN_VAULT = [
-    "https://images.pexels.com/photos/4207892/pexels-photo-4207892.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/4207791/pexels-photo-4207791.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/4207788/pexels-photo-4207788.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/4207794/pexels-photo-4207794.jpeg?auto=compress&cs=tinysrgb&w=800"
-]
 
 # ==============================================================================
 # 📐 VERİ MODELLERİ
@@ -170,8 +190,8 @@ class DynamicProductPafta(BaseModel):
     bullet_1: str = Field(description="Geometri inovasyonu")
     bullet_2: str = Field(description="Malzeme ve sır")
     bullet_3: str = Field(description="Ergonomi ve servis faydası")
-    benchmark_reference: str = Field(description="Referans alınan marka ve seri (Örn: Revol Caractère, Bernardaud Ecume)")
-    image_search_query: str = Field(description="SerpApi için spesifik ürün arama sorgusu (Örn: Revol Caractere porcelain bowl studio)")
+    benchmark_reference: str = Field(description="Referans alınan marka ve seri")
+    image_search_query: str = Field(description="SerpApi için spesifik ürün arama sorgusu")
     image_url: Optional[str] = Field(default=None)
 
 class LaunchVisionPillar(BaseModel):
@@ -202,29 +222,24 @@ class ChatRequest(BaseModel):
     message: str
 
 # ==============================================================================
-# 🤖 ÇOKLU AJAN VE ORKESTRASYON
+# 🤖 ÇOKLU AJAN ORKESTRASYONU
 # ==============================================================================
 AGENT_DALIN = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
-Görevin: Kullanıcının girdiği sektörü analiz etmek; Firebase stüdyo katalog arşivini, OpenAlex ve Exa AI verilerini sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
+Görevin: Kullanıcının girdiği sektörü analiz etmek; OpenAlex ve Exa AI verilerini sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
 Kural: Asla jenerik konuşma; havacılıkta DeSter, hastanede Bauscher, baristada ACME/Loveramics, fine-dining'de Revol/Bernardaud/Hering Berlin/Churchill standartlarını esas al.
-Her pafta için 'image_search_query' alanına Google Görsellerde doğrudan o porseleni bulacak net İngilizce marka+ürün sorgusunu yaz.
 """
 
 AGENT_AUDITOR = """
 Sen Purecept Tasarım ve Ergonomi Denetçisisin.
 Dalin'in analizini endüstriyel gerçeklik filtresinden geçirirsin:
 - İstiflenebilirlik, cidar kalınlığı, salamander fırın direnci, mikronize sır sertliği.
-Tutarsız veya amatör önerileri elersin.
+Tutarsız ve amatör önerileri elersin.
 """
 
 @app.get("/")
 def root():
-    return {
-        "status": "online", 
-        "engine": "Purecept Dalin SerpApi Live Engine",
-        "serpapi_active": True
-    }
+    return {"status": "online", "engine": "Purecept Dalin Engine (Pristine Tableware Only)"}
 
 @app.post("/chat")
 def chat(request: ChatRequest):
@@ -267,16 +282,28 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # SerpApi ile doğrudan canlı Google Images sorgusu yap
+        # Görselleri ata: Doğrudan saf porselen ve masaüstü arşivi
         paftas = data.get("product_paftas", [])
         for idx, pafta_data in enumerate(paftas):
-            search_q = pafta_data.get("image_search_query") or f"{pafta_data.get('benchmark_reference', '')} {pafta_data.get('product_name', '')}"
-            img_url = search_serpapi_live_image(search_q)
-            pafta_data["image_url"] = img_url if img_url else FALLBACK_PORCELAIN_VAULT[idx % len(FALLBACK_PORCELAIN_VAULT)]
+            p_name = pafta_data.get("product_name", "")
+            p_spec = pafta_data.get("spec_dimension", "")
+            # Güvenli porselen tipini belirle
+            safe_type = "plate"
+            t = f"{p_name} {p_spec}".lower()
+            if any(k in t for k in ["pedestal", "kaide", "amuse"]):
+                safe_type = "pedestal"
+            elif any(k in t for k in ["consomme", "kase", "bowl"]):
+                safe_type = "bowl"
+            elif any(k in t for k in ["dessert", "pre-dessert", "kapsül"]):
+                safe_type = "dessert"
 
-        # Lansman görseli
-        launch_img = search_serpapi_live_image(f"{data.get('target_sector', '')} michelin restaurant interior luxury")
-        data["launch_image_url"] = launch_img if launch_img else "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=1200"
+            # Önce SerpApi ile ara; vazo/kitap riski varsa güvenli porselen arşivine dön
+            search_q = pafta_data.get("image_search_query") or f"{pafta_data.get('benchmark_reference', '')} {p_name}"
+            img = search_serpapi_tableware(search_q, fallback_type=safe_type)
+            pafta_data["image_url"] = img
+
+        # Lansman görseli: Doğrudan Michelin restoran masası
+        data["launch_image_url"] = GUARANTEED_TABLEWARE_ARCHIVE["launch"]
 
         # Firestore kayıt
         try:
@@ -289,7 +316,7 @@ KULLANICI TALEBİ: {request.message}
                 "strategicPositioning": str(data.get("strategic_positioning", "")),
                 "skuCount": len(paftas),
                 "benchmarks": data.get("benchmarks", []),
-                "memoryType": "Purecept_SerpApi_Key_Connected"
+                "memoryType": "Purecept_Pristine_Tableware_Only"
             })
         except Exception as fb_err:
             print(f"[Hafıza Kayıt]: {fb_err}")
