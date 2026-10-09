@@ -1,4 +1,5 @@
 import os
+import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -25,13 +26,10 @@ DALIN_SYSTEM_PROMPT = """
 Sen Purecept Design Studio'nun Kıdemli Marka ve Ürün Yöneticisi olan 'Dalin'sin.
 Ahmet Osman Peker'e doğrudan stratejik ve operasyonel ürün yönetimi raporlaması yapıyorsun.
 
-GÖREVLERİN:
-1. Küresel gastronomi, Horeca porselen, barista kupa/fincan ve sofra üstü trendlerini araştırmak.
-2. Sahadaki boşlukları (operasyonel dayanım, şeflerin tabaklama ergonomisi, istiflenebilirlik, pazar doygunluğu) tespit etmek.
-3. Rakipleri (Churchill, Steelite, 1616 Arita, Serax, Loveramics, Kinto vb.) analiz edip Purecept için konumlandırma stratejisi ve SKU mimarisi çıkarmak.
-4. Raporlarında kullandığın argümanları doğrulamak için gerçek pazar ve ürün referanslarını kullanmak.
-
-KURAL: Raporlarında asla sıradan yemek tarifleri veya alakasız restoran stok görselleri referans verme; odak noktan her zaman endüstriyel sofra üstü ürünleri, porselen tipolojisi, sır dokusu ve sunum ergonomisidir.
+GÖREVİN:
+Horeca porselen, barista fincan/kupa ve sofra üstü trendlerini analiz etmek; pazar boşluklarını,
+form ergonomisini, sır dokularını ve rakip kıyaslamalarını (Loveramics, Hasami, Serax vb.)
+operasyonel bir dille raporlamaktır.
 """
 
 class ChatRequest(BaseModel):
@@ -50,32 +48,65 @@ def chat(request: ChatRequest):
     if not gemini_client:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY bulunamadı.")
     
-    context = ""
-    found_images = []
-    
+    # 1. ADIM: Dalin Ön Pazar Taraması Yapar
+    market_context = ""
     if tavily_client:
         try:
-            # Sektörel pazar araması ve doğrudan ürün görsellerini toplama
-            search_res = tavily_client.search(
-                query=f"{request.message} tableware porcelain horeca design benchmark", 
-                max_results=4,
-                include_images=True
-            )
-            context = "\nSektörel Pazar Verileri: " + str([r.get('content') for r in search_res.get('results', [])])
-            found_images = search_res.get('images', [])[:4]
+            s_res = tavily_client.search(query=f"{request.message} tableware horeca ceramic coffee", max_results=3)
+            market_context = "\nPazar Verileri: " + str([r.get('content') for r in s_res.get('results', [])])
         except Exception:
             pass
 
-    full_prompt = f"{DALIN_SYSTEM_PROMPT}\n{context}\n\nKullanıcı Talebi: {request.message}"
-    
+    # 2. ADIM: Dalin Raporu Yazar
+    prompt = f"{DALIN_SYSTEM_PROMPT}\n{market_context}\n\nKullanıcı Brifingi: {request.message}"
     try:
-        response = gemini_client.models.generate_content(
+        report_resp = gemini_client.models.generate_content(
             model="gemini-3.8-flash",
-            contents=full_prompt,
+            contents=prompt,
         )
-        return {
-            "reply": response.text,
-            "reference_images": found_images
-        }
+        report_text = report_resp.text
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    # 3. ADIM: Dalin Kendi Raporunu Okur ve Nokta Atışı 3 Görsel Terimi Çıkarır
+    image_queries = []
+    if tavily_client:
+        image_prompt = f"""
+        Aşağıdaki ürün yönetimi raporunu oku. Bu rapordaki form, marka ve porselen detaylarını görselleştirmek için
+        Google/Tavily görsel aramasında EN İYİ sonucu verecek 3 adet İngilizce görsel arama terimi üret.
+        Yemek, et, sebze araması KESİNLİKLE YAPMA. Sadece fincan, porselen, kupa, sır ve seramik ürünlerini hedefle.
+        
+        Sadece JSON formatında liste olarak yanıt ver: ["sorgu 1", "sorgu 2", "sorgu 3"]
+        
+        Rapor Metni:
+        {report_text[:1500]}
+        """
+        try:
+            query_resp = gemini_client.models.generate_content(
+                model="gemini-3.8-flash",
+                contents=image_prompt,
+            )
+            raw_text = query_resp.text.replace("```json", "").replace("```", "").strip()
+            image_queries = json.loads(raw_text)
+        except Exception:
+            image_queries = ["specialty coffee ceramic cup lovers", "hasami porcelain mug stackable"]
+
+    # 4. ADIM: Tavily ile Bu Nokta Atışı Terimlerin Gerçek Fotoğraflarını Bulur
+    curated_images = []
+    if tavily_client and image_queries:
+        for q in image_queries[:3]:
+            try:
+                t_img = tavily_client.search(query=q, max_results=1, include_images=True)
+                imgs = t_img.get("images", [])
+                if imgs:
+                    curated_images.append({
+                        "query": q,
+                        "url": imgs[0]
+                    })
+            except Exception:
+                pass
+
+    return {
+        "reply": report_text,
+        "curated_images": curated_images
+    }
