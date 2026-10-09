@@ -27,7 +27,7 @@ tavily_client = TavilyClient(api_key=tavily_key) if tavily_key else None
 
 class TrendCard(BaseModel):
     title: str = Field(description="Trend başlığı (Örn: Mat Yüzeyler)")
-    desc: str = Field(description="Tek cümlelik açıklama (Örn: Dokunma duyusuna hitap eden sırlar.)")
+    desc: str = Field(description="Tek cümlelik açıklama (Örn: Dokunma duyusuna hitap eden ham dokulu sırlar.)")
 
 class BenchmarkItem(BaseModel):
     brand: str = Field(description="Marka adı (Örn: Loveramics & Acme)")
@@ -40,7 +40,7 @@ class SkuSlide(BaseModel):
     bullet_1: str = Field(description="Örn: Krema Koruması: Hızlı ısı kaybını önleyen yapı.")
     bullet_2: str = Field(description="Örn: Derin Form: U şeklinde parabolik iç taban.")
     bullet_3: str = Field(description="Örn: Odak Noktası: Ev baristaları ve tadım etkinlikleri.")
-    image_search_query: str = Field(description="Görsel arama terimi (Örn: cortado ceramic cup table)")
+    image_search_query: str = Field(description="Görsel arama terimi")
     image_url: Optional[str] = Field(default=None)
 
 class LaunchPillar(BaseModel):
@@ -107,25 +107,45 @@ def chat(request: ChatRequest):
         )
         data = json.loads(response.text)
 
-        # Görselleri Tavily ile çekip doğrudan slaytlara gömüyoruz
+        # Görselleri Tavily ile katı filtreli olarak çekiyoruz (Üzerinde afiş, logo, yazı olmayan saf fotoğraflar)
         if tavily_client:
-            # SKU Görselleri
-            for sku in data.get("sku_slides", []):
+            # 1. SKU Ürün Görselleri (Sıfır metin/banner/grafik filtresi)
+            sku_clean_queries = [
+                "minimalist ceramic espresso cup single shot on clean table photography -text -words -logo -poster -banner",
+                "flat white ceramic cup with latte art specialty coffee close up photography -text -words -watermark -poster",
+                "modern ceramic coffee mug on wooden table natural light editorial photography -text -words -poster -signboard"
+            ]
+            
+            for idx, sku in enumerate(data.get("sku_slides", [])):
                 try:
-                    q = sku.get("image_search_query", "ceramic coffee cup specialty cafe")
-                    s_res = tavily_client.search(query=q, max_results=1, include_images=True)
-                    imgs = s_res.get("images", [])
-                    if imgs:
-                        sku["image_url"] = imgs[0]
+                    q = sku_clean_queries[idx % len(sku_clean_queries)]
+                    s_res = tavily_client.search(query=q, max_results=5, include_images=True)
+                    raw_imgs = s_res.get("images", [])
+                    # Yazı/logo/vektör/afiş içeren şüpheli linkleri filtrele
+                    clean_imgs = [
+                        img for img in raw_imgs 
+                        if not any(bad in img.lower() for bad in ["banner", "poster", "vector", "illustration", "logo", "promo", "graphic"])
+                    ]
+                    if clean_imgs:
+                        sku["image_url"] = clean_imgs[0]
+                    elif raw_imgs:
+                        sku["image_url"] = raw_imgs[0]
                 except Exception:
                     pass
             
-            # Lansman / Kafe Görseli
+            # 2. Lansman / Kafe Görseli (Saf mimari iç mekan, tabelasız ve yazısız)
             try:
-                s_res = tavily_client.search(query="modern specialty coffee shop cafe interior architecture", max_results=1, include_images=True)
-                imgs = s_res.get("images", [])
-                if imgs:
-                    data["launch_image_url"] = imgs[0]
+                q_cafe = "modern minimalist specialty coffee shop interior architecture aesthetic photography -text -words -poster -signboard -banner"
+                s_res = tavily_client.search(query=q_cafe, max_results=5, include_images=True)
+                raw_imgs = s_res.get("images", [])
+                clean_imgs = [
+                    img for img in raw_imgs 
+                    if not any(bad in img.lower() for bad in ["banner", "poster", "vector", "logo", "sign", "tabela", "graphic"])
+                ]
+                if clean_imgs:
+                    data["launch_image_url"] = clean_imgs[0]
+                elif raw_imgs:
+                    data["launch_image_url"] = raw_imgs[0]
             except Exception:
                 pass
 
