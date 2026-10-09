@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-google-genai
-tavily-python
-pydantic
 requests
+pydantic
+google-genai
+google-search-results
