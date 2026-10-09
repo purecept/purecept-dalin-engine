@@ -1,5 +1,6 @@
 import os
 import json
+import urllib.parse
 import requests
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -17,7 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API ve Servis Bilgileri
+# ==============================================================================
+# 🔑 API VE SERVİS YAPILANDIRMASI
+# ==============================================================================
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
 
@@ -68,7 +71,7 @@ def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
         print(f"[HAFIZA YAZMA UYARISI]: {e}")
 
 # ==============================================================================
-# 🔍 EXA AI NEURAL SEARCH
+# 🔍 EXA AI NEURAL SEARCH (ANLAMSAL ARAMA MOTORU)
 # ==============================================================================
 def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     if not exa_key:
@@ -91,7 +94,48 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     return []
 
 # ==============================================================================
-# 📐 DİNAMİK VERİ ŞEMALARI
+# 🖼️ DİNAMİK EDİTORYAL GÖRSEL KÜTÜPHANESİ (TİPOLOJİ VE SEKTÖRE DUYARLI)
+# ==============================================================================
+def resolve_dynamic_editorial_image(sector: str, product_name: str, spec: str, fallback_idx: int) -> str:
+    """Ürünün tipolojisine göre doğru editoryal stüdyo fotoğrafını seçer (Kahve tuzağını engeller)."""
+    combined = f"{sector} {product_name} {spec}".lower()
+    
+    # 1. Kase / Bowl
+    if any(k in combined for k in ["kase", "bowl", "çorba", "soup", "hazne", "derin"]):
+        return "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85"
+    
+    # 2. Degüstasyon / Şef / Gourmet Tabağı
+    if any(k in combined for k in ["degüstasyon", "tasting", "ana yemek", "dinner", "gourmet", "düz sunum"]):
+        return "https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=1200&q=85"
+    
+    # 3. Paylaşım Platter'ı / Oval Tepsi / Meze Sunumu
+    if any(k in combined for k in ["platter", "paylaşım", "oval", "tepsi", "tray", "servis tabağı", "kayık"]):
+        return "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85"
+    
+    # 4. Starter / Başlangıç / Yan Tabak
+    if any(k in combined for k in ["starter", "başlangıç", "side", "tabak", "plate", "meze"]):
+        return "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85"
+    
+    # 5. Sadece ve sadece barista/kahve fincanı istenmişse fincan ver
+    if any(k in combined for k in ["kahve", "coffee", "espresso", "latte", "flat white", "cappuccino", "kupa", "mug", "fincan"]):
+        coffee_pool = [
+            "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=85",
+            "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=1200&q=85",
+            "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=85"
+        ]
+        return coffee_pool[fallback_idx % len(coffee_pool)]
+    
+    # Genel Lüks Seramik Ürün Arşivi
+    curated_minimal = [
+        "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85",
+        "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85",
+        "https://images.unsplash.com/photo-1551218808-94e220e084d2?auto=format&fit=crop&w=1200&q=85",
+        "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85"
+    ]
+    return curated_minimal[fallback_idx % len(curated_minimal)]
+
+# ==============================================================================
+# 📐 DİNAMİK SUNUM VE PAFTA VERİ ŞEMALARI (SINIRSIZ SKU & TİPOLOJİ)
 # ==============================================================================
 class TrendCard(BaseModel):
     title: str = Field(description="Trend başlığı")
@@ -114,7 +158,7 @@ class DynamicProductPafta(BaseModel):
     bullet_1: str = Field(description="Form ve geometri inovasyonu")
     bullet_2: str = Field(description="Malzeme ve yüzey dili")
     bullet_3: str = Field(description="Kullanım ergonomisi ve operasyonel fayda")
-    benchmark_reference: str = Field(description="Referans alınan küresel standart")
+    benchmark_reference: str = Field(description="Referans alınan küresel pazar standardı")
     image_url: Optional[str] = Field(default=None)
 
 class LaunchVisionPillar(BaseModel):
@@ -127,16 +171,20 @@ class UniversalPresentationDeck(BaseModel):
     subtitle: str = Field(description="Alt başlık ve stratejik hedef tanımı")
     target_sector: str = Field(description="Hedef sektör")
     
+    # Slayt 2: Dinamikler & Renk
     trends_title: str = Field(default="Tüketim Dinamikleri & Pazar Trendleri")
     trends_subtitle: str = Field(default="Deneyimi şekillendiren mikro dinamikler ve renk kartelası.")
     trends: List[TrendCard]
     trend_colors: List[TrendColor]
     
+    # Slayt 3: Benchmark & Konumlandırma
     benchmarks: List[BenchmarkAnalysisItem]
     strategic_positioning: str = Field(description="Tek paragraf vurucu stratejik konumlandırma tezi")
     
+    # Slayt 4+: Dinamik SKU Paftaları
     product_paftas: List[DynamicProductPafta]
     
+    # Son Slayt: Lansman & Saha
     launch_title: str = Field(default="Saha Lansman ve Entegrasyon Vizyonu")
     launch_pillars: List[LaunchVisionPillar]
     launch_image_url: Optional[str] = Field(default=None)
@@ -150,7 +198,7 @@ class ChatRequest(BaseModel):
 AGENT_DALIN_RESEARCHER = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
 Görevin: Kullanıcının girdiği sektörü analiz etmek, Exa AI pazar istihbaratını okumak ve bu sektörün dünyadaki gerçek pazar liderlerini (Benchmark) tespit ederek boşlukları çıkarmak.
-Kural: Asla jenerik konuşma; havacılık ise DeSter/Kaelis, hastane ise Bauscher/Schönwald, barista ise ACME/Loveramics, fine-dining ise Revol/Bernardaud üzerinden git.
+Kural: Asla jenerik konuşma; havacılık ise DeSter/Kaelis, hastane ise Bauscher/Schönwald, barista ise ACME/Loveramics, fine-dining ise Revol/Bernardaud, lüks marin ise Bernardaud/Haviland/Robbe & Berking üzerinden git.
 """
 
 AGENT_AUDITOR_FILTER = """
@@ -162,19 +210,11 @@ Dalin'in pazar analizini endüstriyel gerçeklik filtresinden geçirirsin:
 Saçma, uydurma veya tutarsız önerileri reddedip rafine hale getirirsin.
 """
 
-PRISTINE_CURATED_LIBRARY = [
-    "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=85",
-    "https://images.unsplash.com/photo-1534778101976-62847782c213?auto=format&fit=crop&w=1200&q=85",
-    "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=85",
-    "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=1200&q=85",
-    "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=1200&q=85"
-]
-
 @app.get("/")
 def root():
     return {
         "status": "online",
-        "agent": "Dalin (Multi-Agent Debate & Mem0 Integrated)",
+        "agent": "Dalin (Multi-Agent Debate & Dynamic Editorial Vision)",
         "studio": "Purecept Design Studio"
     }
 
@@ -221,13 +261,28 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
+        # 4. ADIM: Tipoloji ve Sektöre Göre Kusursuz Görsel Eşleme (Fincan tuzağını yıkar)
         paftas = data.get("product_paftas", [])
+        sec = data.get("target_sector", "")
         for idx, pafta_data in enumerate(paftas):
-            pafta_data["image_url"] = PRISTINE_CURATED_LIBRARY[idx % len(PRISTINE_CURATED_LIBRARY)]
+            p_name = pafta_data.get("product_name", "")
+            p_spec = pafta_data.get("spec_dimension", "")
+            pafta_data["image_url"] = resolve_dynamic_editorial_image(sec, p_name, p_spec, idx)
 
-        data["launch_image_url"] = "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=85"
+        # Lansman Mekanı: Sektöre uygun mimari mekan görseli
+        sec_lower = str(sec).lower()
+        if any(w in sec_lower for w in ["yat", "yacht", "marin", "marine", "deniz", "nautica"]):
+            data["launch_image_url"] = "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?auto=format&fit=crop&w=1200&q=85"
+        elif any(w in sec_lower for w in ["hastane", "hospital", "sağlık", "care", "medikal"]):
+            data["launch_image_url"] = "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=85"
+        elif any(w in sec_lower for w in ["uçak", "aviation", "flight", "air", "in-flight"]):
+            data["launch_image_url"] = "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=1200&q=85"
+        elif any(w in sec_lower for w in ["fine-dining", "gastronomi", "şef", "chef", "restoran"]):
+            data["launch_image_url"] = "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85"
+        else:
+            data["launch_image_url"] = "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=1200&q=85"
 
-        # 4. ADIM: Öğrenilen bilgiyi Mem0 katmanıyla Firestore'a işle
+        # 5. ADIM: Öğrenilen bilgiyi Mem0 katmanıyla Firestore'a işle
         try:
             safe_name = str(data.get("collection_name", "proje")).replace(" ", "_").lower()[:30]
             capsule_id = f"capsule-dalin-{safe_name}"
