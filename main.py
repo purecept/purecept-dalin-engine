@@ -1,4 +1,3 @@
-# Purecept Dalin Engine - Version: 2026.10.FORCE_REBUILD_CERAMIC_V1
 import os
 import json
 import urllib.parse
@@ -10,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from google import genai
 
-app = FastAPI(title="Purecept - Dalin Autonomous Knowledge & Design Engine")
+app = FastAPI(title="Purecept - Dalin Autonomous Live Intelligence Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,10 +19,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Bilgileri
+# ==============================================================================
+# 🔑 API VE HİZMET YAPILANDIRMASI
+# ==============================================================================
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
-hf_token = os.environ.get("HF_TOKEN", "").strip()
+SERPAPI_KEY = "a7d9ba3325d6f27d029c7a907e21d3495e424b0691e5027d0509a7f620f679bd"
 
 FIREBASE_PROJECT_ID = "purecept-studio"
 FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
@@ -31,74 +32,43 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🌐 AÇIK BİLGİ PLATFORMLARI (OPENALEX + ARXIV + HUGGINGFACE)
+# 🔍 SERPAPI: CANLI GOOGLE GÖRSELLER (BOT KALKANI VE ENGEL YOK)
 # ==============================================================================
-def fetch_openalex_insights(topic: str, max_results: int = 2) -> List[str]:
-    query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
-    url = f"https://api.openalex.org/works?search={query}&per-page={max_results}"
-    insights = []
+def search_serpapi_live_image(query: str) -> Optional[str]:
+    """Google Images üzerinden bot kalkanına takılmadan doğrudan orijinal görsel URL'si çeker."""
+    if not SERPAPI_KEY:
+        return None
     try:
-        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=4)
+        # Sorguyu yemek tariflerini ve fast-food'u eleyecek şekilde filtrele
+        refined_query = f"{query} tableware white background studio photography -food -recipe"
+        url = "https://serpapi.com/search.json"
+        params = {
+            "engine": "google_images",
+            "q": refined_query,
+            "api_key": SERPAPI_KEY,
+            "num": 5
+        }
+        res = requests.get(url, params=params, timeout=6)
         if res.status_code == 200:
-            results = res.json().get("results", [])
-            for r in results:
-                title = r.get("title", "")
-                inv_abs = r.get("abstract_inverted_index")
-                abstract = ""
-                if inv_abs:
-                    words = sorted([(pos, w) for w, positions in inv_abs.items() for pos in positions])
-                    abstract = " ".join([w for _, w in words])[:200]
-                if title:
-                    insights.append(f"• [OpenAlex]: {title} - {abstract}")
+            data = res.json()
+            images = data.get("images_results", [])
+            for img in images:
+                orig = img.get("original")
+                if orig and any(orig.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                    return orig
+                elif orig:
+                    return orig
     except Exception as e:
-        print(f"[OpenAlex]: {e}")
-    return insights
-
-def fetch_arxiv_insights(topic: str, max_results: int = 2) -> List[str]:
-    query = urllib.parse.quote_plus(f"all:{topic} AND (all:ceramic OR all:ergonomics OR all:design)")
-    url = f"http://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}"
-    insights = []
-    try:
-        res = requests.get(url, timeout=4)
-        if res.status_code == 200:
-            root = ET.fromstring(res.text)
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            for entry in root.findall("atom:entry", ns):
-                title = entry.find("atom:title", ns)
-                summary = entry.find("atom:summary", ns)
-                t_text = title.text.strip().replace("\n", " ") if title is not None else ""
-                s_text = summary.text.strip().replace("\n", " ")[:200] if summary is not None else ""
-                if t_text:
-                    insights.append(f"• [ArXiv]: {t_text} - {s_text}")
-    except Exception as e:
-        print(f"[ArXiv]: {e}")
-    return insights
-
-def fetch_huggingface_insights(topic: str, max_results: int = 2) -> List[str]:
-    query = urllib.parse.quote_plus(topic)
-    url = f"https://huggingface.co/api/datasets?search={query}&limit={max_results}"
-    insights = []
-    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
-    try:
-        res = requests.get(url, headers=headers, timeout=4)
-        if res.status_code == 200:
-            datasets = res.json()
-            for ds in datasets:
-                ds_id = ds.get("id", "")
-                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım normu"
-                if ds_id:
-                    insights.append(f"• [HuggingFace]: {ds_id} - {desc}")
-    except Exception as e:
-        print(f"[HuggingFace]: {e}")
-    return insights
+        print(f"[SerpApi Hatası]: {e}")
+    return None
 
 # ==============================================================================
-# 🧠 MEM0: KALICI STÜDYO HAFIZASI
+# 🧠 MEM0 & PURECEPT FIREBASE KATALOG VE BELLEK KATMANI
 # ==============================================================================
 def retrieve_purecept_memory_context(sector_hint: str) -> str:
     url = f"https://firestore.googleapis.com/v1/projects/{FIREBASE_PROJECT_ID}/databases/(default)/documents/purecept_knowledge_base?key={FIREBASE_API_KEY}"
     try:
-        res = requests.get(url, timeout=4)
+        res = requests.get(url, timeout=5)
         if res.status_code == 200:
             docs = res.json().get("documents", [])
             memory_rules = []
@@ -110,7 +80,7 @@ def retrieve_purecept_memory_context(sector_hint: str) -> str:
                 if sector_hint.lower() in sec or sector_hint.lower() in topic.lower():
                     memory_rules.append(f"• [{topic}]: {strat[:200]}")
             if memory_rules:
-                return "\n[STÜDYO HAFIZASI (MEM0)]:\n" + "\n".join(memory_rules[:3])
+                return "\n[PURECEPT STÜDYO VE KATALOG HAFIZASI]:\n" + "\n".join(memory_rules[:4])
     except Exception as e:
         print(f"[Hafıza Okuma]: {e}")
     return ""
@@ -126,14 +96,30 @@ def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
         elif isinstance(v, (list, dict)):
             fields[k] = {"stringValue": json.dumps(v, ensure_ascii=False)}
     try:
-        requests.patch(url, json={"fields": fields}, timeout=4)
+        requests.patch(url, json={"fields": fields}, timeout=5)
     except Exception as e:
         print(f"[Hafıza Yazma]: {e}")
 
 # ==============================================================================
-# 🔍 EXA AI NEURAL SEARCH
+# 🌐 AÇIK BİLGİ VE AKADEMİK PLATFORMLAR (OPENALEX + EXA AI)
 # ==============================================================================
-def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
+def fetch_openalex_insights(topic: str) -> List[str]:
+    query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
+    url = f"https://api.openalex.org/works?search={query}&per-page=2"
+    insights = []
+    try:
+        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=4)
+        if res.status_code == 200:
+            results = res.json().get("results", [])
+            for r in results:
+                title = r.get("title", "")
+                if title:
+                    insights.append(f"• [Standart]: {title}")
+    except Exception as e:
+        print(f"[OpenAlex]: {e}")
+    return insights
+
+def exa_neural_search(query: str) -> List[Dict]:
     if not exa_key:
         return []
     url = "https://api.exa.ai/search"
@@ -141,9 +127,8 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     payload = {
         "query": query,
         "useAutoprompt": True,
-        "numResults": num_results,
-        "type": "neural",
-        "contents": {"text": {"maxCharacters": 800}}
+        "numResults": 2,
+        "type": "neural"
     }
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=5)
@@ -153,63 +138,13 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
         print(f"[Exa AI]: {e}")
     return []
 
-# ==============================================================================
-# 🎯 DAHİLİ KUSURSUZ GÖRSEL ÜRETECİ (SIFIR HARİCİ URL, SIFIR PATLAMA)
-# ==============================================================================
-def get_guaranteed_purecept_visual(product_name: str, spec: str, pafta_code: str) -> str:
-    """Frontend ve PDF motorunun doğrudan işleyebileceği temiz stüdyo teknik pafta formatı."""
-    t = f"{product_name} {spec}".lower()
-    
-    # 1. Heykelsi Pedestal / Amuse-Bouche Kaidesi
-    if any(k in t for k in ["pedestal", "kaide", "amuse", "monolit"]):
-        svg = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="800" height="800">
-  <rect width="800" height="800" fill="#151618"/>
-  <circle cx="400" cy="400" r="300" fill="none" stroke="#26282C" stroke-width="2"/>
-  <path d="M 290 620 L 330 290 Q 400 250 470 290 L 510 620 Z" fill="#E8E4DC" stroke="#C9C3B6" stroke-width="3"/>
-  <ellipse cx="400" cy="290" rx="70" ry="22" fill="#D3CBC0"/>
-  <ellipse cx="400" cy="286" rx="30" ry="8" fill="#151618" opacity="0.4"/>
-  <text x="400" y="700" text-anchor="middle" fill="#99958C" font-family="sans-serif" font-size="22" font-weight="600" letter-spacing="3">{pafta_code} // MONOLITHIC PEDESTAL</text>
-  <text x="400" y="735" text-anchor="middle" fill="#66635B" font-family="sans-serif" font-size="15">{spec}</text>
-</svg>'''
-    
-    # 2. Derin Parabolik Kuyu Kase (Consommé)
-    elif any(k in t for k in ["consomme", "consommé", "kase", "bowl", "parabolik", "derin", "çorba"]):
-        svg = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="800" height="800">
-  <rect width="800" height="800" fill="#151618"/>
-  <circle cx="400" cy="400" r="300" fill="none" stroke="#26282C" stroke-width="2"/>
-  <ellipse cx="400" cy="380" rx="280" ry="80" fill="#E8E4DC" stroke="#C9C3B6" stroke-width="3"/>
-  <ellipse cx="400" cy="380" rx="130" ry="38" fill="#D3CBC0"/>
-  <path d="M 270 380 Q 400 580 530 380 Z" fill="#ABA293" opacity="0.6"/>
-  <text x="400" y="700" text-anchor="middle" fill="#99958C" font-family="sans-serif" font-size="22" font-weight="600" letter-spacing="3">{pafta_code} // DEEP PARABOLIC BOWL</text>
-  <text x="400" y="735" text-anchor="middle" fill="#66635B" font-family="sans-serif" font-size="15">{spec}</text>
-</svg>'''
-
-    # 3. Kriyojenik / İzotermal Pre-Dessert Kabı
-    elif any(k in t for k in ["dessert", "pre-dessert", "kriyojenik", "izotermal", "tatlı", "sorbe", "kabı"]):
-        svg = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="800" height="800">
-  <rect width="800" height="800" fill="#151618"/>
-  <circle cx="400" cy="400" r="300" fill="none" stroke="#26282C" stroke-width="2"/>
-  <path d="M 310 560 C 270 420 310 300 400 300 C 490 300 530 420 490 560 Z" fill="#E8E4DC" stroke="#C9C3B6" stroke-width="3"/>
-  <ellipse cx="400" cy="320" rx="70" ry="24" fill="#D3CBC0"/>
-  <ellipse cx="400" cy="560" rx="45" ry="12" fill="#ABA293"/>
-  <text x="400" y="700" text-anchor="middle" fill="#99958C" font-family="sans-serif" font-size="22" font-weight="600" letter-spacing="3">{pafta_code} // ISOTHERMAL COUPELLE</text>
-  <text x="400" y="735" text-anchor="middle" fill="#66635B" font-family="sans-serif" font-size="15">{spec}</text>
-</svg>'''
-
-    # 4. Çerçevesiz Düz Degüstasyon Sunum Aynası (Varsayılan ve Tabaklar)
-    else:
-        svg = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="800" height="800">
-  <rect width="800" height="800" fill="#151618"/>
-  <circle cx="400" cy="400" r="300" fill="none" stroke="#26282C" stroke-width="2"/>
-  <ellipse cx="400" cy="400" rx="310" ry="100" fill="#E8E4DC" stroke="#C9C3B6" stroke-width="3"/>
-  <ellipse cx="400" cy="400" rx="260" ry="80" fill="#F4F1EC"/>
-  <ellipse cx="400" cy="400" rx="180" ry="55" fill="none" stroke="#D3CBC0" stroke-width="1.5" stroke-dasharray="4,6"/>
-  <text x="400" y="700" text-anchor="middle" fill="#99958C" font-family="sans-serif" font-size="22" font-weight="600" letter-spacing="3">{pafta_code} // RIMLESS TASTING MIRROR</text>
-  <text x="400" y="735" text-anchor="middle" fill="#66635B" font-family="sans-serif" font-size="15">{spec}</text>
-</svg>'''
-
-    encoded = urllib.parse.quote(svg)
-    return f"data:image/svg+xml;charset=utf-8,{encoded}"
+# Güvenli yedek görsel havuzu
+FALLBACK_PORCELAIN_VAULT = [
+    "https://images.pexels.com/photos/4207892/pexels-photo-4207892.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/4207791/pexels-photo-4207791.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/4207788/pexels-photo-4207788.jpeg?auto=compress&cs=tinysrgb&w=800",
+    "https://images.pexels.com/photos/4207794/pexels-photo-4207794.jpeg?auto=compress&cs=tinysrgb&w=800"
+]
 
 # ==============================================================================
 # 📐 VERİ MODELLERİ
@@ -235,7 +170,8 @@ class DynamicProductPafta(BaseModel):
     bullet_1: str = Field(description="Geometri inovasyonu")
     bullet_2: str = Field(description="Malzeme ve sır")
     bullet_3: str = Field(description="Ergonomi ve servis faydası")
-    benchmark_reference: str = Field(description="Referans standart")
+    benchmark_reference: str = Field(description="Referans alınan marka ve seri (Örn: Revol Caractère, Bernardaud Ecume)")
+    image_search_query: str = Field(description="SerpApi için spesifik ürün arama sorgusu (Örn: Revol Caractere porcelain bowl studio)")
     image_url: Optional[str] = Field(default=None)
 
 class LaunchVisionPillar(BaseModel):
@@ -266,12 +202,13 @@ class ChatRequest(BaseModel):
     message: str
 
 # ==============================================================================
-# 🤖 ÇOKLU AJAN ORKESTRASYONU
+# 🤖 ÇOKLU AJAN VE ORKESTRASYON
 # ==============================================================================
 AGENT_DALIN = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
-Görevin: Kullanıcının girdiği sektörü analiz etmek; Exa AI, OpenAlex, ArXiv ve Hugging Face arşivlerini sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
-Kural: Asla jenerik konuşma; havacılıkta DeSter, hastanede Bauscher, baristada ACME/Loveramics, fine-dining'de Revol/Bernardaud/Hering Berlin standartlarını esas al.
+Görevin: Kullanıcının girdiği sektörü analiz etmek; Firebase stüdyo katalog arşivini, OpenAlex ve Exa AI verilerini sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
+Kural: Asla jenerik konuşma; havacılıkta DeSter, hastanede Bauscher, baristada ACME/Loveramics, fine-dining'de Revol/Bernardaud/Hering Berlin/Churchill standartlarını esas al.
+Her pafta için 'image_search_query' alanına Google Görsellerde doğrudan o porseleni bulacak net İngilizce marka+ürün sorgusunu yaz.
 """
 
 AGENT_AUDITOR = """
@@ -285,8 +222,8 @@ Tutarsız veya amatör önerileri elersin.
 def root():
     return {
         "status": "online", 
-        "engine": "Purecept Dalin Engine",
-        "version": "2026.10.FORCE_REBUILD_CERAMIC_V1"
+        "engine": "Purecept Dalin SerpApi Live Engine",
+        "serpapi_active": True
     }
 
 @app.post("/chat")
@@ -295,18 +232,11 @@ def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY eksik.")
 
     memory_context = retrieve_purecept_memory_context(request.message[:40])
+    openalex_res = fetch_openalex_insights(request.message[:30])
+    exa_res = exa_neural_search(f"porcelain tableware {request.message[:30]}")
     
-    neural_insights = exa_neural_search(f"tableware ergonomics porcelain standards {request.message}", num_results=2)
-    exa_context = ""
-    if neural_insights:
-        exa_context = "\n[EXA AI PAZAR İSTİHBARATI]:\n" + "\n".join([f"- {r.get('title')}: {r.get('text', '')[:300]}" for r in neural_insights])
-
-    openalex_res = fetch_openalex_insights(request.message[:30], max_results=2)
-    arxiv_res = fetch_arxiv_insights(request.message[:30], max_results=2)
-    hf_res = fetch_huggingface_insights(request.message[:30], max_results=2)
-    academic_context = "\n".join(openalex_res + arxiv_res + hf_res)
-    if academic_context:
-        academic_context = "\n[AÇIK BİLGİ PLATFORMLARI]:\n" + academic_context
+    academic_context = "\n".join(openalex_res)
+    exa_context = "\n".join([f"- {r.get('title')}" for r in exa_res])
 
     prompt = f"""
 {AGENT_DALIN}
@@ -337,27 +267,16 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # Görselleri doğrudan %100 güvenli dahili SVG motorundan üret
+        # SerpApi ile doğrudan canlı Google Images sorgusu yap
         paftas = data.get("product_paftas", [])
         for idx, pafta_data in enumerate(paftas):
-            p_code = pafta_data.get("pafta_code", f"SKU 0{idx+1}")
-            p_name = pafta_data.get("product_name", "")
-            p_spec = pafta_data.get("spec_dimension", "")
-            pafta_data["image_url"] = get_guaranteed_purecept_visual(p_name, p_spec, p_code)
+            search_q = pafta_data.get("image_search_query") or f"{pafta_data.get('benchmark_reference', '')} {pafta_data.get('product_name', '')}"
+            img_url = search_serpapi_live_image(search_q)
+            pafta_data["image_url"] = img_url if img_url else FALLBACK_PORCELAIN_VAULT[idx % len(FALLBACK_PORCELAIN_VAULT)]
 
         # Lansman görseli
-        launch_svg = '''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 1200 675" width="1200" height="675">
-  <rect width="1200" height="675" fill="#141517"/>
-  <rect x="200" y="380" width="800" height="15" fill="#EAE6DF" rx="4"/>
-  <rect x="280" y="395" width="20" height="200" fill="#242528"/>
-  <rect x="900" y="395" width="20" height="200" fill="#242528"/>
-  <ellipse cx="600" cy="350" rx="140" ry="32" fill="#E6E2DC" stroke="#C9C3B6" stroke-width="2"/>
-  <ellipse cx="600" cy="350" rx="90" ry="20" fill="#D3CBC0"/>
-  <path d="M 600 0 L 600 260" stroke="#4F5157" stroke-width="2"/>
-  <path d="M 570 260 L 630 260 L 615 285 L 585 285 Z" fill="#D4AF37"/>
-  <text x="600" y="620" text-anchor="middle" fill="#99958C" font-family="sans-serif" font-size="18" font-weight="600" letter-spacing="4">MICHELIN OPERATIONAL ARCHITECTURE // FIELD DEPLOYMENT</text>
-</svg>'''
-        data["launch_image_url"] = f"data:image/svg+xml;charset=utf-8,{urllib.parse.quote(launch_svg)}"
+        launch_img = search_serpapi_live_image(f"{data.get('target_sector', '')} michelin restaurant interior luxury")
+        data["launch_image_url"] = launch_img if launch_img else "https://images.pexels.com/photos/262978/pexels-photo-262978.jpeg?auto=compress&cs=tinysrgb&w=1200"
 
         # Firestore kayıt
         try:
@@ -370,7 +289,7 @@ KULLANICI TALEBİ: {request.message}
                 "strategicPositioning": str(data.get("strategic_positioning", "")),
                 "skuCount": len(paftas),
                 "benchmarks": data.get("benchmarks", []),
-                "memoryType": "Purecept_ZeroCache_Deterministic_Engine"
+                "memoryType": "Purecept_SerpApi_Key_Connected"
             })
         except Exception as fb_err:
             print(f"[Hafıza Kayıt]: {fb_err}")
