@@ -7,11 +7,11 @@ from tavily import TavilyClient
 
 app = FastAPI(title="Purecept - Dalin Engine")
 
-# Tarayıcıdan ve arayüzden gelen isteklere izin ver (CORS)
+# Tarayıcı fetch kısıtlamalarını tamamen kaldıran CORS ayarı
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -36,6 +36,10 @@ class ChatRequest(BaseModel):
 @app.get("/")
 def root():
     return {"status": "ok", "agent": "Dalin", "studio": "Purecept Design Studio"}
+
+@app.options("/{full_path:path}")
+def preflight_handler():
+    return {"status": "ok"}
 
 @app.post("/chat")
 def chat(request: ChatRequest):
