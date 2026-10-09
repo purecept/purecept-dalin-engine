@@ -1,8 +1,9 @@
 import os
 import json
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google import genai
 from tavily import TavilyClient
 
@@ -24,15 +25,37 @@ tavily_client = TavilyClient(api_key=tavily_key) if tavily_key else None
 
 DALIN_SYSTEM_PROMPT = """
 Sen Purecept Design Studio'nun Kıdemli Marka ve Ürün Yöneticisi olan 'Dalin'sin.
-Ahmet Osman Peker'e doğrudan stratejik ve operasyonel ürün yönetimi raporlaması yapıyorsun.
+Ahmet Osman Peker'e doğrudan stratejik ürün yönetimi ve pazar konumlandırma raporlaması yapıyorsun.
 
 GÖREVİN:
-Horeca porselen, barista fincan/kupa ve sofra üstü trendlerini analiz etmek; pazar boşluklarını,
-form ergonomisini, sır dokularını ve rakip kıyaslamalarını (Loveramics, Hasami, Fellow, Serax vb.)
-operasyonel bir dille raporlamaktır.
+1. Pazardaki trendleri ve Horeca açıklarını belirlemek.
+2. Rakipleri (Loveramics, Hasami, Fellow, notNeutral vb.) tasarım ve saha kullanımı açısından kıyaslamak.
+3. Purecept için stratejik 3 SKU'luk koleksiyon mimarisi ve renk/yüzey önerilerini sunmak.
 
-KURAL: Raporlarında asla ASCII karakterleriyle çizim, ok şeması veya anlamsız metin grafikleri (|/\\|, +---+, (O)) üretme. Teknik parametreleri temiz markdown listeleri ve tablolar halinde ver.
+KURAL: Asla ASCII karakterleriyle görsel veya şekil çizmeye çalışma. Metinleri kısa, vurucu ve profesyonel bir ürün yöneticisi diliyle kurgula.
 """
+
+# PDF Şablonuna Birebir Oturacak Veri Yapısı (Pydantic Schema)
+class BenchmarkItem(BaseModel):
+    brand: str = Field(description="Rakip marka ve koleksiyon adı")
+    strengths: str = Field(description="Güçlü yönleri")
+    weaknesses: str = Field(description="Operasyonel açığı veya pazar boşluğu")
+    purecept_opportunity: str = Field(description="Purecept'in yakalayacağı fırsat")
+    product_image_url: Optional[str] = Field(default=None, description="Resmi ürün görseli linki")
+
+class SkuItem(BaseModel):
+    name: str = Field(description="SKU Adı (Örn: SKU-01 Cortado & Espresso)")
+    volume: str = Field(description="Hacim (Örn: 90 ml)")
+    diameter: str = Field(description="Ölçü veya form karakteri")
+    target_usage: str = Field(description="Kullanım amacı ve barista ergonomisi")
+
+class DalinReportSchema(BaseModel):
+    executive_summary: str = Field(description="Yönetici özeti ve pazar tezi")
+    market_gaps: List[str] = Field(description="Tespit edilen 3 kritik pazar boşluğu")
+    benchmarks: List[BenchmarkItem] = Field(description="Rakip ürün kıyaslama matrisi")
+    sku_architecture: List[SkuItem] = Field(description="Önerilen 3 SKU koleksiyon kurgusu")
+    glaze_palette_notes: str = Field(description="Sır, renk ve doku önerileri")
+    next_steps: List[str] = Field(description="Sonraki operasyonel adımlar")
 
 class ChatRequest(BaseModel):
     message: str
@@ -50,7 +73,7 @@ def chat(request: ChatRequest):
     if not gemini_client:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY bulunamadı.")
     
-    # 1. Pazar verisi taraması
+    # 1. Pazar Araması
     market_context = ""
     if tavily_client:
         try:
@@ -59,18 +82,7 @@ def chat(request: ChatRequest):
         except Exception:
             pass
 
-    # 2. Rapor metni
-    prompt = f"{DALIN_SYSTEM_PROMPT}\n{market_context}\n\nKullanıcı Brifingi: {request.message}"
-    try:
-        report_resp = gemini_client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-        )
-        report_text = report_resp.text
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    # 3. Kıyaslanan rakiplerin gerçek ürün görsellerini nokta atışı çek
+    # 2. Benchmark Görsellerini Toplama
     benchmark_images = {}
     competitors = {
         "Loveramics": "Loveramics Egg coffee cup official product tableware",
@@ -78,7 +90,6 @@ def chat(request: ChatRequest):
         "Fellow": "Fellow Monty milk art cup ceramic product",
         "notNeutral": "notNeutral Lino coffee cup product photography"
     }
-    
     if tavily_client:
         for brand, q in competitors.items():
             try:
@@ -89,7 +100,32 @@ def chat(request: ChatRequest):
             except Exception:
                 pass
 
-    return {
-        "reply": report_text,
-        "benchmark_images": benchmark_images
-    }
+    # 3. Gemini ile Yapılandırılmış Çıktı Üretimi
+    full_prompt = f"{DALIN_SYSTEM_PROMPT}\n{market_context}\n\nKullanıcı Talebi: {request.message}"
+    
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=full_prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": DalinReportSchema,
+            }
+        )
+        report_data = json.loads(response.text)
+
+        # Bulunan görselleri benchmark objelerine eşle
+        for item in report_data.get("benchmarks", []):
+            brand_name = item.get("brand", "")
+            for key, url in benchmark_images.items():
+                if key.lower() in brand_name.lower():
+                    item["product_image_url"] = url
+                    break
+
+        return {
+            "status": "success",
+            "data": report_data,
+            "benchmark_images": benchmark_images
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
