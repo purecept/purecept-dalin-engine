@@ -23,88 +23,78 @@ tavily_key = os.environ.get("TAVILY_API_KEY")
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 tavily_client = TavilyClient(api_key=tavily_key) if tavily_key else None
 
-DALIN_SYSTEM_PROMPT = """
-Sen Purecept Design Studio'nun Kıdemli Marka ve Ürün Yöneticisi olan 'Dalin'sin.
-Ahmet Osman Peker'e doğrudan stratejik ürün yönetimi ve pazar konumlandırma raporlaması yapıyorsun.
+# --- GOLD STANDARD SLIDE SCHEMAS ---
 
-GÖREVİN:
-1. Pazardaki trendleri ve Horeca açıklarını belirlemek.
-2. Rakipleri (Loveramics, Hasami, Fellow, notNeutral vb.) tasarım ve saha kullanımı açısından kıyaslamak.
-3. Purecept için stratejik 3 SKU'luk koleksiyon mimarisi ve renk/yüzey önerilerini sunmak.
+class TrendCard(BaseModel):
+    title: str = Field(description="Trend başlığı (Örn: Mat Yüzeyler)")
+    desc: str = Field(description="Tek cümlelik açıklama (Örn: Dokunma duyusuna hitap eden sırlar.)")
 
-KURAL: Asla ASCII karakterleriyle görsel veya şekil çizmeye çalışma. Metinleri kısa, vurucu ve profesyonel bir ürün yöneticisi diliyle kurgula.
-"""
-
-# PDF Şablonuna Birebir Oturacak Veri Yapısı (Pydantic Schema)
 class BenchmarkItem(BaseModel):
-    brand: str = Field(description="Rakip marka ve koleksiyon adı")
-    strengths: str = Field(description="Güçlü yönleri")
-    weaknesses: str = Field(description="Operasyonel açığı veya pazar boşluğu")
-    purecept_opportunity: str = Field(description="Purecept'in yakalayacağı fırsat")
-    product_image_url: Optional[str] = Field(default=None, description="Resmi ürün görseli linki")
+    brand: str = Field(description="Marka adı (Örn: Loveramics & Acme)")
+    plus_points: List[str] = Field(description="Pozitif özellikler (+)")
+    minus_points: List[str] = Field(description="Negatif/eksik yönler (-)")
 
-class SkuItem(BaseModel):
-    name: str = Field(description="SKU Adı (Örn: SKU-01 Cortado & Espresso)")
-    volume: str = Field(description="Hacim (Örn: 90 ml)")
-    diameter: str = Field(description="Ölçü veya form karakteri")
-    target_usage: str = Field(description="Kullanım amacı ve barista ergonomisi")
+class SkuSlide(BaseModel):
+    volume_tag: str = Field(description="Büyük hacim etiketi (Örn: 75-90 ML)")
+    sku_name: str = Field(description="SKU ismi (Örn: SKU 1: The Core)")
+    bullet_1: str = Field(description="Örn: Krema Koruması: Hızlı ısı kaybını önleyen yapı.")
+    bullet_2: str = Field(description="Örn: Derin Form: U şeklinde parabolik iç taban.")
+    bullet_3: str = Field(description="Örn: Odak Noktası: Ev baristaları ve tadım etkinlikleri.")
+    image_search_query: str = Field(description="Görsel arama terimi (Örn: cortado ceramic cup table)")
+    image_url: Optional[str] = Field(default=None)
 
-class DalinReportSchema(BaseModel):
-    executive_summary: str = Field(description="Yönetici özeti ve pazar tezi")
-    market_gaps: List[str] = Field(description="Tespit edilen 3 kritik pazar boşluğu")
-    benchmarks: List[BenchmarkItem] = Field(description="Rakip ürün kıyaslama matrisi")
-    sku_architecture: List[SkuItem] = Field(description="Önerilen 3 SKU koleksiyon kurgusu")
-    glaze_palette_notes: str = Field(description="Sır, renk ve doku önerileri")
-    next_steps: List[str] = Field(description="Sonraki operasyonel adımlar")
+class LaunchPillar(BaseModel):
+    title: str = Field(description="Saha vizyon başlığı (Örn: Görsel Kimlik)")
+    desc: str = Field(description="Açıklama (Örn: Sosyal medya uyumlu, doğal ve sürdürülebilir toprak tonları.)")
+
+class GoldStandardPresentation(BaseModel):
+    title: str = Field(default="STRATEJİ VE VİZYON RAPORU")
+    collection_name: str = Field(description="Örn: 3. Nesil Barista Fincanı Koleksiyonu")
+    subtitle: str = Field(description="Örn: Rakip benchmark analizi, SKU optimizasyonu ve saha lansman öngörüleri.")
+    
+    # Slayt 2: Dinamikler
+    trends_title: str = Field(default="Tüketim Dinamikleri")
+    trends_subtitle: str = Field(default="Kahve deneyimini şekillendiren dört temel fiziksel beklenti.")
+    trends: List[TrendCard]
+    
+    # Slayt 3: Benchmark
+    benchmarks: List[BenchmarkItem]
+    strategic_positioning: str = Field(description="Stratejik konumlandırma tek paragraf vurucu özet")
+    
+    # Slayt 4, 5, 6: 3 SKU Paftaları (Split Layout)
+    sku_slides: List[SkuSlide]
+    
+    # Slayt 7: Saha Lansman
+    launch_title: str = Field(default="Saha Lansman Vizyonu")
+    launch_pillars: List[LaunchPillar]
+    launch_image_url: Optional[str] = Field(default=None)
 
 class ChatRequest(BaseModel):
     message: str
 
+DALIN_SYSTEM_PROMPT = """
+Sen Purecept Design Studio'nun Kıdemli Marka ve Ürün Yöneticisi Dalin'sin.
+Ahmet Osman Peker için editoryal, lüks, minimalist bir endüstriyel tasarım sunumu hazırlıyorsun.
+
+KURAL: Asla uzun roman veya bürokratik rapor yazma.
+Tam olarak şu altın şablonu (Gold Standard) dolduracaksın:
+1. Başlıklar net ve vurucu.
+2. 4 Tüketim trendi (Mat Yüzeyler, Latte Art Formu, Isı Kontrolü, Ergonomi gibi).
+3. 3 Rakip kıyaslaması (Loveramics, notNeutral, Fellow) ve tek cümlelik 'Stratejik Konumlandırma'.
+4. Tam 3 SKU (The Core, The Canvas, The Comfort gibi) - her biri için büyük hacim etiketi ve 3 kısa madde.
+5. Saha lansman vizyonu (Görsel Kimlik, Operasyonel Verimlilik, Duyusal Temas gibi 3 sütun).
+"""
+
 @app.get("/")
 def root():
     return {"status": "ok", "agent": "Dalin", "studio": "Purecept Design Studio"}
-
-@app.options("/{full_path:path}")
-def preflight_handler():
-    return {"status": "ok"}
 
 @app.post("/chat")
 def chat(request: ChatRequest):
     if not gemini_client:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY bulunamadı.")
     
-    # 1. Pazar Araması
-    market_context = ""
-    if tavily_client:
-        try:
-            s_res = tavily_client.search(
-                query=f"{request.message} specialty coffee tableware horeca cup benchmark", 
-                max_results=3
-            )
-            market_context = "\nPazar Verileri: " + str([r.get('content') for r in s_res.get('results', [])])
-        except Exception:
-            pass
-
-    # 2. Benchmark Görsellerini Toplama
-    benchmark_images = {}
-    competitors = {
-        "Loveramics": "Loveramics Egg coffee cup official product tableware",
-        "Hasami": "Hasami porcelain mug stackable official product",
-        "Fellow": "Fellow Monty milk art cup ceramic product",
-        "notNeutral": "notNeutral Lino coffee cup product photography"
-    }
-    if tavily_client:
-        for brand, q in competitors.items():
-            try:
-                t_img = tavily_client.search(query=q, max_results=1, include_images=True)
-                imgs = t_img.get("images", [])
-                if imgs:
-                    benchmark_images[brand] = imgs[0]
-            except Exception:
-                pass
-
-    # 3. Gemini ile Yapılandırılmış Çıktı Üretimi
-    full_prompt = f"{DALIN_SYSTEM_PROMPT}\n{market_context}\n\nKullanıcı Talebi: {request.message}"
+    full_prompt = f"{DALIN_SYSTEM_PROMPT}\n\nKullanıcı Talebi: {request.message}"
     
     try:
         response = gemini_client.models.generate_content(
@@ -112,60 +102,47 @@ def chat(request: ChatRequest):
             contents=full_prompt,
             config={
                 "response_mime_type": "application/json",
-                "response_schema": DalinReportSchema,
+                "response_schema": GoldStandardPresentation,
             }
         )
-        report_data = json.loads(response.text)
+        data = json.loads(response.text)
 
-        # Bulunan görselleri benchmark objelerine eşle
-        for item in report_data.get("benchmarks", []):
-            brand_name = item.get("brand", "")
-            for key, url in benchmark_images.items():
-                if key.lower() in brand_name.lower():
-                    item["product_image_url"] = url
-                    break
+        # Görselleri Tavily ile çekip doğrudan slaytlara gömüyoruz
+        if tavily_client:
+            # SKU Görselleri
+            for sku in data.get("sku_slides", []):
+                try:
+                    q = sku.get("image_search_query", "ceramic coffee cup specialty cafe")
+                    s_res = tavily_client.search(query=q, max_results=1, include_images=True)
+                    imgs = s_res.get("images", [])
+                    if imgs:
+                        sku["image_url"] = imgs[0]
+                except Exception:
+                    pass
+            
+            # Lansman / Kafe Görseli
+            try:
+                s_res = tavily_client.search(query="modern specialty coffee shop cafe interior architecture", max_results=1, include_images=True)
+                imgs = s_res.get("images", [])
+                if imgs:
+                    data["launch_image_url"] = imgs[0]
+            except Exception:
+                pass
 
-        # Arayüzdeki sohbet balonunda okunaklı çıkacak Markdown özeti
-        executive_summary = report_data.get("executive_summary", "")
-        gaps_md = "\n".join([f"- {gap}" for gap in report_data.get("market_gaps", [])])
-        
-        benchmarks_md = "\n".join([
-            f"- **{b.get('brand')}**: {b.get('strengths')} / *Açık:* {b.get('weaknesses')}" 
-            for b in report_data.get("benchmarks", [])
-        ])
-        
-        skus_md = "\n".join([
-            f"- **{s.get('name')}** ({s.get('volume')}, {s.get('diameter')}): {s.get('target_usage')}" 
-            for s in report_data.get("sku_architecture", [])
-        ])
-        
-        glaze_md = report_data.get("glaze_palette_notes", "")
-        next_steps_md = "\n".join([f"1. {step}" for step in report_data.get("next_steps", [])])
+        # Sohbet ekranı için özet
+        reply = f"""### {data.get('collection_name')}
+**{data.get('subtitle')}**
 
-        markdown_reply = f"""### Yönetici Özeti & Pazar Tezi
-{executive_summary}
+#### Stratejik Konumlandırma
+{data.get('strategic_positioning')}
 
-### Tespit Edilen Pazar Boşlukları
-{gaps_md}
-
-### Rakip Benchmark Değerlendirmesi
-{benchmarks_md}
-
-### Önerilen 3 SKU Koleksiyon Mimarisi
-{skus_md}
-
-### Sır, Renk ve Doku Direktifleri
-{glaze_md}
-
-### Sonraki Adımlar & Eylem Planı
-{next_steps_md}
-"""
+#### Önerilen Koleksiyon Mimarisi
+""" + "\n".join([f"- **{s.get('sku_name')}** ({s.get('volume_tag')}): {s.get('bullet_1')}" for s in data.get('sku_slides', [])])
 
         return {
             "status": "success",
-            "reply": markdown_reply,
-            "data": report_data,
-            "benchmark_images": benchmark_images
+            "reply": reply,
+            "data": data
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
