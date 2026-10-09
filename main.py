@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Bilgileri
+# API Yapılandırması
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
 hf_token = os.environ.get("HF_TOKEN", "").strip()
@@ -30,7 +30,7 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🌐 3 AÇIK BİLGİ PLATFORMU (OPENALEX + ARXIV + HUGGINGFACE)
+# 🌐 AÇIK BİLGİ PLATFORMLARI (OPENALEX + ARXIV + HUGGINGFACE)
 # ==============================================================================
 def fetch_openalex_insights(topic: str, max_results: int = 2) -> List[str]:
     query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
@@ -84,7 +84,7 @@ def fetch_huggingface_insights(topic: str, max_results: int = 2) -> List[str]:
             datasets = res.json()
             for ds in datasets:
                 ds_id = ds.get("id", "")
-                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım normu"
+                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım norm seti"
                 if ds_id:
                     insights.append(f"• [HuggingFace]: {ds_id} - {desc}")
     except Exception as e:
@@ -153,62 +153,49 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     return []
 
 # ==============================================================================
-# 📐 DETERMINISTIK VEKTÖREL PAFTA MOTORU (HARİCİ STOK FOTOĞRAFLARA TAM VEDA)
+# 🎯 DOĞRULANMIŞ, CANVAS UYUMLU DOĞRUDAN STATİK PORSELEN GÖRSEL KÜTÜPHANESİ
 # ==============================================================================
-def generate_deterministic_ceramic_svg(product_name: str, spec: str, pafta_code: str) -> str:
-    """Ürünün tipolojisine göre kusursuz, stüdyo kalitesinde vektörel kesit üretir."""
+# PDF oluşturucunun doğrudan indirebildiği, bozulmayan statik stüdyo seramik objeleri:
+PORCELAIN_STUDIO_VAULT = {
+    # 1. Monolitik Kaide / Amuse-Bouche Pedestal (İzole heykelsi seramik silindirik form)
+    "pedestal": "https://images.unsplash.com/photo-1615529182904-14819c35db37?auto=format&fit=crop&w=800&q=80",
+    
+    # 2. Sferik / Parabolik Derin Consommé Kasesi (Stüdyo çekimi derin seramik kase)
+    "bowl": "https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=800&q=80",
+    
+    # 3. Düz Degüstasyon Sunum Aynası (Tekil minimalist beyaz servis tabağı)
+    "plate": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+    
+    # 4. Pre-Dessert Kabı / Tadım Çanağı (Tekil organik porselen coupelle)
+    "dessert": "https://images.unsplash.com/photo-1576020799627-aeac76d580dc?auto=format&fit=crop&w=800&q=80",
+    
+    # 5. Paylaşım Platter'ı / Geniş Servis Tepsisi
+    "platter": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=800&q=80"
+}
+
+def resolve_tableware_image(product_name: str, spec: str, idx: int) -> str:
+    """Ürünün tipolojisine göre canvas/PDF dostu statik görsel döndürür."""
     t = f"{product_name} {spec}".lower()
     
-    # 1. Heykelsi Monolit Kaide (Amuse-Bouche)
     if any(k in t for k in ["pedestal", "kaide", "amuse", "stèle", "monolit"]):
-        svg_content = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="100%" height="100%">
-  <rect width="800" height="800" fill="#18191B"/>
-  <circle cx="400" cy="400" r="320" fill="none" stroke="#2A2C30" stroke-width="1.5" stroke-dasharray="4,8"/>
-  <path d="M 280 620 L 320 280 Q 400 240 480 280 L 520 620 Z" fill="#E6E2DC" stroke="#C5BFB5" stroke-width="2"/>
-  <ellipse cx="400" cy="280" rx="80" ry="24" fill="#D4CDC3" stroke="#B0A89B" stroke-width="2"/>
-  <ellipse cx="400" cy="275" rx="35" ry="10" fill="#18191B" opacity="0.35"/>
-  <text x="400" y="710" text-anchor="middle" fill="#8E8B82" font-family="monospace" font-size="20" letter-spacing="4">{pafta_code} // MONOLITHIC PEDESTAL</text>
-  <text x="400" y="745" text-anchor="middle" fill="#5F5D56" font-family="sans-serif" font-size="14">{spec}</text>
-</svg>'''
+        return PORCELAIN_STUDIO_VAULT["pedestal"]
+        
+    if any(k in t for k in ["consomme", "consommé", "kase", "bowl", "sferik", "çorba", "derin"]):
+        return PORCELAIN_STUDIO_VAULT["bowl"]
+        
+    if any(k in t for k in ["ayna", "flat", "düz", "degüstasyon", "tabak", "plate"]):
+        return PORCELAIN_STUDIO_VAULT["plate"]
+        
+    if any(k in t for k in ["dessert", "pre-dessert", "tatlı", "tadımlık", "sorbe", "izotermal"]):
+        return PORCELAIN_STUDIO_VAULT["dessert"]
 
-    # 2. Parabolik Derin Kuyu Kase (Consommé)
-    elif any(k in t for k in ["consomme", "consommé", "kase", "bowl", "cloche", "vortex", "çorba"]):
-        svg_content = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="100%" height="100%">
-  <rect width="800" height="800" fill="#18191B"/>
-  <circle cx="400" cy="400" r="320" fill="none" stroke="#2A2C30" stroke-width="1.5" stroke-dasharray="4,8"/>
-  <ellipse cx="400" cy="380" rx="300" ry="85" fill="#E6E2DC" stroke="#C5BFB5" stroke-width="2"/>
-  <ellipse cx="400" cy="380" rx="140" ry="42" fill="#CEC7BC" stroke="#B0A89B" stroke-width="2"/>
-  <path d="M 260 380 Q 400 580 540 380 Z" fill="#B5ADA0" opacity="0.45"/>
-  <text x="400" y="710" text-anchor="middle" fill="#8E8B82" font-family="monospace" font-size="20" letter-spacing="4">{pafta_code} // DEEP PARABOLIC BOWL</text>
-  <text x="400" y="745" text-anchor="middle" fill="#5F5D56" font-family="sans-serif" font-size="14">{spec}</text>
-</svg>'''
-
-    # 3. Pre-Dessert Kabı / İzotermal Coupelle
-    elif any(k in t for k in ["dessert", "pre-dessert", "calix", "pod", "tatlı", "sorbe"]):
-        svg_content = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="100%" height="100%">
-  <rect width="800" height="800" fill="#18191B"/>
-  <circle cx="400" cy="400" r="320" fill="none" stroke="#2A2C30" stroke-width="1.5" stroke-dasharray="4,8"/>
-  <path d="M 310 560 C 260 400 300 280 400 280 C 500 280 540 400 490 560 Z" fill="#E6E2DC" stroke="#C5BFB5" stroke-width="2"/>
-  <ellipse cx="400" cy="310" rx="75" ry="25" fill="#CEC7BC" stroke="#B0A89B" stroke-width="2"/>
-  <ellipse cx="400" cy="560" rx="45" ry="12" fill="#A8A093"/>
-  <text x="400" y="710" text-anchor="middle" fill="#8E8B82" font-family="monospace" font-size="20" letter-spacing="4">{pafta_code} // ISOTHERMAL COUPELLE</text>
-  <text x="400" y="745" text-anchor="middle" fill="#5F5D56" font-family="sans-serif" font-size="14">{spec}</text>
-</svg>'''
-
-    # 4. Ultra Düz Degüstasyon Sunum Aynası (Varsayılan & Düz Tabaklar)
-    else:
-        svg_content = f'''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 800 800" width="100%" height="100%">
-  <rect width="800" height="800" fill="#18191B"/>
-  <circle cx="400" cy="400" r="320" fill="none" stroke="#2A2C30" stroke-width="1.5" stroke-dasharray="4,8"/>
-  <ellipse cx="400" cy="400" rx="330" ry="105" fill="#E6E2DC" stroke="#C5BFB5" stroke-width="2"/>
-  <ellipse cx="400" cy="400" rx="275" ry="85" fill="#F4F2EE" stroke="#DDD8CF" stroke-width="1.5"/>
-  <ellipse cx="400" cy="400" rx="190" ry="58" fill="none" stroke="#D1CBC0" stroke-width="1" stroke-dasharray="3,6"/>
-  <text x="400" y="710" text-anchor="middle" fill="#8E8B82" font-family="monospace" font-size="20" letter-spacing="4">{pafta_code} // RIMLESS TASTING MIRROR</text>
-  <text x="400" y="745" text-anchor="middle" fill="#5F5D56" font-family="sans-serif" font-size="14">{spec}</text>
-</svg>'''
-
-    encoded = urllib.parse.quote(svg_content)
-    return f"data:image/svg+xml;utf8,{encoded}"
+    fallback_list = [
+        PORCELAIN_STUDIO_VAULT["pedestal"],
+        PORCELAIN_STUDIO_VAULT["bowl"],
+        PORCELAIN_STUDIO_VAULT["plate"],
+        PORCELAIN_STUDIO_VAULT["dessert"]
+    ]
+    return fallback_list[idx % len(fallback_list)]
 
 # ==============================================================================
 # 📐 VERİ MODELLERİ
@@ -332,35 +319,15 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # Görselleri artık ASLA rastgele fotoğraflardan çekmiyoruz; deterministik SVG pafta üretiyoruz:
+        # Doğrudan statik, test edilmiş seramik görsellerini paftalara ata
         paftas = data.get("product_paftas", [])
         for idx, pafta_data in enumerate(paftas):
-            p_code = pafta_data.get("pafta_code", f"SKU 0{idx+1}")
             p_name = pafta_data.get("product_name", "")
             p_spec = pafta_data.get("spec_dimension", "")
-            pafta_data["image_url"] = generate_deterministic_ceramic_svg(p_name, p_spec, p_code)
+            pafta_data["image_url"] = resolve_tableware_image(p_name, p_spec, idx)
 
-        # Lansman görseli için garantili saf minimalist salon SVG'si
-        launch_svg = '''<svg xmlns="http://www.w3.org/2005/svg" viewBox="0 0 1200 675" width="100%" height="100%">
-  <rect width="1200" height="675" fill="#141517"/>
-  <rect x="200" y="380" width="800" height="15" fill="#EAE6DF" rx="4"/>
-  <rect x="280" y="395" width="20" height="200" fill="#242528"/>
-  <rect x="900" y="395" width="20" height="200" fill="#242528"/>
-  <ellipse cx="600" cy="350" rx="140" ry="32" fill="#E6E2DC" stroke="#C5BFB5" stroke-width="1.5"/>
-  <ellipse cx="600" cy="350" rx="90" ry="20" fill="#CEC7BC"/>
-  <circle cx="600" cy="180" r="1.5" fill="#FFF" opacity="0.8"/>
-  <path d="M 600 0 L 600 260" stroke="#4F5157" stroke-width="1.5"/>
-  <path d="M 570 260 L 630 260 L 615 285 L 585 285 Z" fill="#D4AF37"/>
-  <polygon points="600,285 450,380 750,380" fill="url(#coneGrad)" opacity="0.08"/>
-  <defs>
-    <linearGradient id="coneGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFF"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <text x="600" y="620" text-anchor="middle" fill="#8E8B82" font-family="monospace" font-size="16" letter-spacing="6">MICHELIN OPERATIONAL ARCHITECTURE // FIELD DEPLOYMENT</text>
-</svg>'''
-        data["launch_image_url"] = f"data:image/svg+xml;utf8,{urllib.parse.quote(launch_svg)}"
+        # Lansman mimari mekanı
+        data["launch_image_url"] = "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=800&q=80"
 
         # Firestore kayıt
         try:
@@ -373,7 +340,7 @@ KULLANICI TALEBİ: {request.message}
                 "strategicPositioning": str(data.get("strategic_positioning", "")),
                 "skuCount": len(paftas),
                 "benchmarks": data.get("benchmarks", []),
-                "memoryType": "Purecept_ZeroStock_Deterministic_Engine"
+                "memoryType": "Purecept_Static_Ceramic_Vault"
             })
         except Exception as fb_err:
             print(f"[Hafıza Kayıt]: {fb_err}")
