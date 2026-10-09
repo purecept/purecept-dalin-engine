@@ -28,8 +28,10 @@ Ahmet Osman Peker'e doğrudan stratejik ve operasyonel ürün yönetimi raporlam
 
 GÖREVİN:
 Horeca porselen, barista fincan/kupa ve sofra üstü trendlerini analiz etmek; pazar boşluklarını,
-form ergonomisini, sır dokularını ve rakip kıyaslamalarını (Loveramics, Hasami, Serax vb.)
+form ergonomisini, sır dokularını ve rakip kıyaslamalarını (Loveramics, Hasami, Fellow, Serax vb.)
 operasyonel bir dille raporlamaktır.
+
+KURAL: Raporlarında asla ASCII karakterleriyle çizim, ok şeması veya anlamsız metin grafikleri (|/\\|, +---+, (O)) üretme. Teknik parametreleri temiz markdown listeleri ve tablolar halinde ver.
 """
 
 class ChatRequest(BaseModel):
@@ -48,16 +50,16 @@ def chat(request: ChatRequest):
     if not gemini_client:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY bulunamadı.")
     
-    # 1. Ön Pazar Taraması
+    # 1. Pazar verisi taraması
     market_context = ""
     if tavily_client:
         try:
-            s_res = tavily_client.search(query=f"{request.message} tableware horeca ceramic coffee cup", max_results=3)
+            s_res = tavily_client.search(query=f"{request.message} specialty coffee tableware horeca cup benchmark", max_results=3)
             market_context = "\nPazar Verileri: " + str([r.get('content') for r in s_res.get('results', [])])
         except Exception:
             pass
 
-    # 2. Raporun Yazılması
+    # 2. Rapor metni
     prompt = f"{DALIN_SYSTEM_PROMPT}\n{market_context}\n\nKullanıcı Brifingi: {request.message}"
     try:
         report_resp = gemini_client.models.generate_content(
@@ -68,51 +70,26 @@ def chat(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 3. Spesifik ve Sadece Ürün Odaklı Arama Terimleri Üretme
-    image_queries = []
+    # 3. Kıyaslanan rakiplerin gerçek ürün görsellerini nokta atışı çek
+    benchmark_images = {}
+    competitors = {
+        "Loveramics": "Loveramics Egg coffee cup official product tableware",
+        "Hasami": "Hasami porcelain mug stackable official product",
+        "Fellow": "Fellow Monty milk art cup ceramic product",
+        "notNeutral": "notNeutral Lino coffee cup product photography"
+    }
+    
     if tavily_client:
-        image_prompt = f"""
-        Aşağıdaki raporu incele. Raporda bahsedilen fincan, kupa ve porselenleri görselleştirmek için
-        3 adet çok spesifik İngilizce ürün arama terimi üret.
-        KRİTİK KURAL: Aramanın sonuna mutlaka 'product photography isolated neutral background tableware' ekle.
-        Asla yemek, yiyecek, restoran veya masa araması yapma. Sadece tekil porselen ürününü hedefle.
-        Örnek format: ["Loveramics egg cup product photography neutral background", "Hasami porcelain mug isolated tableware", "matte ceramic coffee cup minimalist product"]
-        
-        Sadece JSON dizi olarak yanıt ver: ["sorgu 1", "sorgu 2", "sorgu 3"]
-        
-        Rapor:
-        {report_text[:1200]}
-        """
-        try:
-            query_resp = gemini_client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=image_prompt,
-            )
-            raw_text = query_resp.text.replace("```json", "").replace("```", "").strip()
-            image_queries = json.loads(raw_text)
-        except Exception:
-            image_queries = [
-                "Loveramics egg cup coffee product photography",
-                "Hasami porcelain mug stackable tableware product",
-                "matte ceramic specialty coffee cup design product"
-            ]
-
-    # 4. Görselleri Çekme
-    curated_images = []
-    if tavily_client and image_queries:
-        for q in image_queries[:3]:
+        for brand, q in competitors.items():
             try:
                 t_img = tavily_client.search(query=q, max_results=1, include_images=True)
                 imgs = t_img.get("images", [])
                 if imgs:
-                    curated_images.append({
-                        "query": q,
-                        "url": imgs[0]
-                    })
+                    benchmark_images[brand] = imgs[0]
             except Exception:
                 pass
 
     return {
         "reply": report_text,
-        "curated_images": curated_images
+        "benchmark_images": benchmark_images
     }
