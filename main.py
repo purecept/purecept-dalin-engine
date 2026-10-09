@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.parse
+import xml.etree.ElementTree as ET
 import requests
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException
@@ -18,9 +19,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API ve Servis Bilgileri
+# ==============================================================================
+# 🔑 API VE HİZMET TANIMLARI
+# ==============================================================================
 gemini_key = os.environ.get("GEMINI_API_KEY")
 exa_key = os.environ.get("EXA_API_KEY", "f1d719aa-2cb1-48ea-b346-d16f5d0871b4").strip()
+hf_token = os.environ.get("HF_TOKEN", "").strip()
 
 FIREBASE_PROJECT_ID = "purecept-studio"
 FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
@@ -28,29 +32,71 @@ FIREBASE_API_KEY = "AIzaSyCXW75WiHdylqW1gD7Ngw8dGlbU3rl-nHI"
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 
 # ==============================================================================
-# 🌐 3. TARAF AÇIK KAYNAK ARŞİV MOTORLARI (OPENALEX & HUGGINGFACE)
+# 🌐 1. PLATFORM: OPENALEX API (ÜCRETSİZ & ANAHTARSIZ AKADEMİK ARŞİV)
 # ==============================================================================
-def fetch_openalex_technical_insights(topic: str, max_results: int = 2) -> List[str]:
-    """Dünyanın en büyük açık akademik/teknik kütüphanesinden standart ve kısıt çeker."""
+def fetch_openalex_insights(topic: str, max_results: int = 2) -> List[str]:
     query = urllib.parse.quote_plus(f"{topic} ceramic porcelain ergonomics tableware")
     url = f"https://api.openalex.org/works?search={query}&per-page={max_results}"
     insights = []
     try:
-        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=6)
+        res = requests.get(url, headers={"User-Agent": "PureceptDesignStudio/1.0"}, timeout=5)
         if res.status_code == 200:
             results = res.json().get("results", [])
             for r in results:
                 title = r.get("title", "")
-                abstract = ""
-                # OpenAlex ters indeksli özet formatını düz metne çevirme
                 inv_abs = r.get("abstract_inverted_index")
+                abstract = ""
                 if inv_abs:
                     words = sorted([(pos, w) for w, positions in inv_abs.items() for pos in positions])
-                    abstract = " ".join([w for _, w in words])[:250]
+                    abstract = " ".join([w for _, w in words])[:200]
                 if title:
-                    insights.append(f"• [Akademik/Teknik Standart: {title}]: {abstract}")
+                    insights.append(f"• [OpenAlex]: {title} - {abstract}")
     except Exception as e:
-        print(f"[OPENALEX UYARISI]: {e}")
+        print(f"[OpenAlex Uyarısı]: {e}")
+    return insights
+
+# ==============================================================================
+# 🌐 2. PLATFORM: ARXIV REST API (ÜCRETSİZ & ANAHTARSIZ MÜHENDİSLİK ARŞİVİ)
+# ==============================================================================
+def fetch_arxiv_insights(topic: str, max_results: int = 2) -> List[str]:
+    query = urllib.parse.quote_plus(f"all:{topic} AND (all:ceramic OR all:ergonomics OR all:design)")
+    url = f"http://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}"
+    insights = []
+    try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            root = ET.fromstring(res.text)
+            ns = {"atom": "http://www.w3.org/2005/Atom"}
+            for entry in root.findall("atom:entry", ns):
+                title = entry.find("atom:title", ns)
+                summary = entry.find("atom:summary", ns)
+                t_text = title.text.strip().replace("\n", " ") if title is not None else ""
+                s_text = summary.text.strip().replace("\n", " ")[:200] if summary is not None else ""
+                if t_text:
+                    insights.append(f"• [ArXiv]: {t_text} - {s_text}")
+    except Exception as e:
+        print(f"[ArXiv Uyarısı]: {e}")
+    return insights
+
+# ==============================================================================
+# 🌐 3. PLATFORM: HUGGING FACE HUB API (AÇIK VERİ SETİ VE MODEL ONTOLOJİSİ)
+# ==============================================================================
+def fetch_huggingface_insights(topic: str, max_results: int = 2) -> List[str]:
+    query = urllib.parse.quote_plus(topic)
+    url = f"https://huggingface.co/api/datasets?search={query}&limit={max_results}"
+    insights = []
+    headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+    try:
+        res = requests.get(url, headers=headers, timeout=5)
+        if res.status_code == 200:
+            datasets = res.json()
+            for ds in datasets:
+                ds_id = ds.get("id", "")
+                desc = ds.get("description", "")[:150] if ds.get("description") else "Tasarım/Endüstri veri seti"
+                if ds_id:
+                    insights.append(f"• [HuggingFace Dataset]: {ds_id} - {desc}")
+    except Exception as e:
+        print(f"[HuggingFace Uyarısı]: {e}")
     return insights
 
 # ==============================================================================
@@ -86,7 +132,6 @@ def persist_purecept_learned_capsule(capsule_id: str, payload: dict):
             fields[k] = {"integerValue": str(v)}
         elif isinstance(v, (list, dict)):
             fields[k] = {"stringValue": json.dumps(v, ensure_ascii=False)}
-            
     try:
         requests.patch(url, json={"fields": fields}, timeout=6)
     except Exception as e:
@@ -116,7 +161,7 @@ def exa_neural_search(query: str, num_results: int = 3) -> List[Dict]:
     return []
 
 # ==============================================================================
-# 🖼️ SAF PORSELEN VE EDİTORYAL ÜRÜN KÜTÜPHANESİ (YEMEKSİZ & STÜDYO ÇEKİMİ)
+# 🖼️ SAF PORSELEN VE EDİTORYAL ÜRÜN KÜTÜPHANESİ
 # ==============================================================================
 STUDIO_PORCELAIN_ASSETS = {
     "flat_plate": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=85",
@@ -212,13 +257,13 @@ class ChatRequest(BaseModel):
 # ==============================================================================
 AGENT_DALIN_RESEARCHER = """
 Sen Purecept Kıdemli Marka ve Ürün Direktörü DALIN'sin.
-Görevin: Kullanıcının girdiği sektörü analiz etmek, Exa AI ve OpenAlex küresel bilgi arşivlerini sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
+Görevin: Kullanıcının girdiği sektörü analiz etmek; Exa AI, OpenAlex, ArXiv ve Hugging Face bilgi havuzlarını sentezleyerek gerçek pazar liderlerini (Benchmark) tespit etmek.
 Kural: Asla jenerik konuşma; havacılıkta DeSter, hastanede Bauscher, baristada ACME/Loveramics, fine-dining'de Revol/Bernardaud standartlarını esas al.
 """
 
 AGENT_AUDITOR_FILTER = """
 Sen Purecept Kıdemli Tasarım ve Ergonomi Denetçisisin.
-Dalin'in pazar analizini endüstriyel gerçeklik filtresinden geçirirsin:
+Dalin'in analizini endüstriyel gerçeklik filtresinden geçirirsin:
 - Formlar operasyonda kırılgan mı, istiflenebilir mi (stackable)?
 - Yüzey dokusu çizilmeye ve lekeye dayanıklı mı?
 - Ölçüler ve cidar kalınlıkları sektörün fiziksel standartlarıyla örtüşüyor mu?
@@ -229,7 +274,7 @@ Saçma veya tutarsız önerileri reddedip rafine hale getirirsin.
 def root():
     return {
         "status": "online",
-        "agent": "Dalin (OpenAlex Knowledge Base & Multi-Agent Engine Connected)",
+        "agent": "Dalin (OpenAlex, ArXiv, HuggingFace & Exa AI Engine Connected)",
         "studio": "Purecept Design Studio"
     }
 
@@ -241,17 +286,21 @@ def chat(request: ChatRequest):
     # 1. Hafıza Taraması (Mem0)
     memory_context = retrieve_purecept_memory_context(request.message[:40])
 
-    # 2. Canlı Sektörel Arama (Exa AI)
+    # 2. Exa AI Canlı Ticari Arama
     neural_insights = exa_neural_search(f"tableware ergonomics porcelain standards {request.message}", num_results=2)
     exa_context = ""
     if neural_insights:
         exa_context = "\n[EXA AI PAZAR İSTİHBARATI]:\n" + "\n".join([f"- {r.get('title')}: {r.get('text', '')[:300]}" for r in neural_insights])
 
-    # 3. Açık Kaynak Akademik & Standart Bilgi Havuzu (OpenAlex)
-    openalex_insights = fetch_openalex_technical_insights(request.message[:30], max_results=2)
+    # 3. Üç Açık Bilgi Havuzu Sorgusu (OpenAlex + ArXiv + Hugging Face)
+    openalex_res = fetch_openalex_insights(request.message[:30], max_results=2)
+    arxiv_res = fetch_arxiv_insights(request.message[:30], max_results=2)
+    hf_res = fetch_huggingface_insights(request.message[:30], max_results=2)
+    
+    academic_blocks = openalex_res + arxiv_res + hf_res
     academic_context = ""
-    if openalex_insights:
-        academic_context = "\n[AÇIK BİLGİ HAVUZU & TEKNİK STANDARTLAR]:\n" + "\n".join(openalex_insights)
+    if academic_blocks:
+        academic_context = "\n[AÇIK BİLGİ HAVUZLARI (OPENALEX + ARXIV + HUGGINGFACE)]:\n" + "\n".join(academic_blocks)
 
     # 4. Çoklu Ajan Konsensüsü
     orchestration_prompt = f"""
@@ -283,7 +332,7 @@ KULLANICI TALEBİ: {request.message}
         )
         data = json.loads(response.text)
 
-        # 5. Görselleri Eşle (Yemek/kaburga tamamen devre dışı, saf seramik)
+        # 5. Saf Seramik Görsellerini Eşle
         paftas = data.get("product_paftas", [])
         sec = data.get("target_sector", "")
         for idx, pafta_data in enumerate(paftas):
@@ -291,7 +340,7 @@ KULLANICI TALEBİ: {request.message}
             p_spec = pafta_data.get("spec_dimension", "")
             pafta_data["image_url"] = resolve_pristine_tableware_image(sec, p_name, p_spec, idx)
 
-        # Lansman Mekanı Görseli
+        # Lansman Mekanı
         sec_lower = str(sec).lower()
         if any(w in sec_lower for w in ["yat", "yacht", "marin", "marine", "deniz"]):
             data["launch_image_url"] = "https://images.unsplash.com/photo-1567899378494-47b22a2ae96a?auto=format&fit=crop&w=1200&q=85"
@@ -315,7 +364,7 @@ KULLANICI TALEBİ: {request.message}
                 "strategicPositioning": str(data.get("strategic_positioning", "")),
                 "skuCount": len(paftas),
                 "benchmarks": data.get("benchmarks", []),
-                "memoryType": "Mem0_OpenAlex_Exa_Verified"
+                "memoryType": "Mem0_MultiPlatform_Learned_Knowledge"
             })
         except Exception as fb_err:
             print(f"[HAFIZA KAYIT HATASI]: {fb_err}")
