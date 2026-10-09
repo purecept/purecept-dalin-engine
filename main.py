@@ -77,7 +77,10 @@ def chat(request: ChatRequest):
     market_context = ""
     if tavily_client:
         try:
-            s_res = tavily_client.search(query=f"{request.message} specialty coffee tableware horeca cup benchmark", max_results=3)
+            s_res = tavily_client.search(
+                query=f"{request.message} specialty coffee tableware horeca cup benchmark", 
+                max_results=3
+            )
             market_context = "\nPazar Verileri: " + str([r.get('content') for r in s_res.get('results', [])])
         except Exception:
             pass
@@ -122,8 +125,45 @@ def chat(request: ChatRequest):
                     item["product_image_url"] = url
                     break
 
+        # Arayüzdeki sohbet balonunda okunaklı çıkacak Markdown özeti
+        executive_summary = report_data.get("executive_summary", "")
+        gaps_md = "\n".join([f"- {gap}" for gap in report_data.get("market_gaps", [])])
+        
+        benchmarks_md = "\n".join([
+            f"- **{b.get('brand')}**: {b.get('strengths')} / *Açık:* {b.get('weaknesses')}" 
+            for b in report_data.get("benchmarks", [])
+        ])
+        
+        skus_md = "\n".join([
+            f"- **{s.get('name')}** ({s.get('volume')}, {s.get('diameter')}): {s.get('target_usage')}" 
+            for s in report_data.get("sku_architecture", [])
+        ])
+        
+        glaze_md = report_data.get("glaze_palette_notes", "")
+        next_steps_md = "\n".join([f"1. {step}" for step in report_data.get("next_steps", [])])
+
+        markdown_reply = f"""### Yönetici Özeti & Pazar Tezi
+{executive_summary}
+
+### Tespit Edilen Pazar Boşlukları
+{gaps_md}
+
+### Rakip Benchmark Değerlendirmesi
+{benchmarks_md}
+
+### Önerilen 3 SKU Koleksiyon Mimarisi
+{skus_md}
+
+### Sır, Renk ve Doku Direktifleri
+{glaze_md}
+
+### Sonraki Adımlar & Eylem Planı
+{next_steps_md}
+"""
+
         return {
             "status": "success",
+            "reply": markdown_reply,
             "data": report_data,
             "benchmark_images": benchmark_images
         }
