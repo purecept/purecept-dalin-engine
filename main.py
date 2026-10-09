@@ -23,43 +23,49 @@ tavily_key = os.environ.get("TAVILY_API_KEY")
 gemini_client = genai.Client(api_key=gemini_key) if gemini_key else None
 tavily_client = TavilyClient(api_key=tavily_key) if tavily_key else None
 
-# --- GOLD STANDARD SLIDE SCHEMAS ---
+# --- GELİŞMİŞ EDİTORYAL ŞEMA ---
 
 class TrendCard(BaseModel):
-    title: str = Field(description="Trend başlığı (Örn: Mat Yüzeyler)")
-    desc: str = Field(description="Tek cümlelik açıklama (Örn: Dokunma duyusuna hitap eden ham dokulu sırlar.)")
+    title: str = Field(description="Trend başlığı (Örn: Mat ve Dokunsal Yüzeyler)")
+    desc: str = Field(description="Maksimum 2 kısa cümlelik açıklama.")
+
+class TrendColor(BaseModel):
+    name: str = Field(description="Renk ismi (Örn: Kalsine Taş Beji)")
+    hex_code: str = Field(description="HEX kodu (Örn: #D8CFC2)")
+    role: str = Field(description="Kullanım alanı (Örn: Dış Gövde Ham Sır)")
 
 class BenchmarkItem(BaseModel):
-    brand: str = Field(description="Marka adı (Örn: Loveramics & Acme)")
-    plus_points: List[str] = Field(description="Pozitif özellikler (+)")
-    minus_points: List[str] = Field(description="Negatif/eksik yönler (-)")
+    brand: str = Field(description="Marka adı (Örn: Loveramics)")
+    plus_points: List[str] = Field(description="2 adet pozitif özellik (+)")
+    minus_points: List[str] = Field(description="2 adet eksik/zayıf yön (-)")
 
 class SkuSlide(BaseModel):
-    volume_tag: str = Field(description="Büyük hacim etiketi (Örn: 75-90 ML)")
-    sku_name: str = Field(description="SKU ismi (Örn: SKU 1: The Core)")
-    bullet_1: str = Field(description="Örn: Krema Koruması: Hızlı ısı kaybını önleyen yapı.")
-    bullet_2: str = Field(description="Örn: Derin Form: U şeklinde parabolik iç taban.")
-    bullet_3: str = Field(description="Örn: Odak Noktası: Ev baristaları ve tadım etkinlikleri.")
-    image_search_query: str = Field(description="Görsel arama terimi")
+    volume_tag: str = Field(description="Hacim etiketi (Örn: 75-90 ML)")
+    sku_name: str = Field(description="SKU ismi (Örn: SKU 01: The Core // Espresso & Cortado)")
+    bullet_1: str = Field(description="1. Teknik madde (Örn: Krema Koruması: Parabolik iç taban.)")
+    bullet_2: str = Field(description="2. Malzeme/Ergonomi maddesi")
+    bullet_3: str = Field(description="3. Hedef kullanım senaryosu")
+    image_search_query: str = Field(description="Spesifik ürün arama sorgusu")
     image_url: Optional[str] = Field(default=None)
 
 class LaunchPillar(BaseModel):
-    title: str = Field(description="Saha vizyon başlığı (Örn: Görsel Kimlik)")
-    desc: str = Field(description="Açıklama (Örn: Sosyal medya uyumlu, doğal ve sürdürülebilir toprak tonları.)")
+    title: str = Field(description="Saha vizyon başlığı (Örn: Görsel & Kimliksel Güç)")
+    desc: str = Field(description="Kısa açıklama (Maksimum 2 satır)")
 
 class GoldStandardPresentation(BaseModel):
     title: str = Field(default="STRATEJİ VE VİZYON RAPORU")
-    collection_name: str = Field(description="Örn: 3. Nesil Barista Fincanı Koleksiyonu")
-    subtitle: str = Field(description="Örn: Rakip benchmark analizi, SKU optimizasyonu ve saha lansman öngörüleri.")
+    collection_name: str = Field(description="Örn: Purecept Artisan: 3. Nesil Barista Koleksiyonu")
+    subtitle: str = Field(description="Örn: Rakip benchmark analizi, SKU optimizasyonu ve saha lansman vizyonu.")
     
-    # Slayt 2: Dinamikler
-    trends_title: str = Field(default="Tüketim Dinamikleri")
-    trends_subtitle: str = Field(default="Kahve deneyimini şekillendiren dört temel fiziksel beklenti.")
+    # Slayt 2: Dinamikler ve Renk Paleti
+    trends_title: str = Field(default="2026 Tüketim Dinamikleri & Trendler")
+    trends_subtitle: str = Field(default="Nitelikli kahve deneyimini şekillendiren mikro dinamikler ve renk paleti.")
     trends: List[TrendCard]
+    trend_colors: List[TrendColor] = Field(description="Koleksiyon için 4 adet editoryal trend renk")
     
     # Slayt 3: Benchmark
     benchmarks: List[BenchmarkItem]
-    strategic_positioning: str = Field(description="Stratejik konumlandırma tek paragraf vurucu özet")
+    strategic_positioning: str = Field(description="Stratejik konumlandırma tek paragraf net özet")
     
     # Slayt 4, 5, 6: 3 SKU Paftaları (Split Layout)
     sku_slides: List[SkuSlide]
@@ -74,15 +80,14 @@ class ChatRequest(BaseModel):
 
 DALIN_SYSTEM_PROMPT = """
 Sen Purecept Design Studio'nun Kıdemli Marka ve Ürün Yöneticisi Dalin'sin.
-Ahmet Osman Peker için editoryal, lüks, minimalist bir endüstriyel tasarım sunumu hazırlıyorsun.
+Kurucu ve Baş Tasarımcı Ahmet Osman Peker için editoryal, lüks, minimalist bir Horeca/Barista sunumu hazırlıyorsun.
 
-KURAL: Asla uzun roman veya bürokratik rapor yazma.
-Tam olarak şu altın şablonu (Gold Standard) dolduracaksın:
-1. Başlıklar net ve vurucu.
-2. 4 Tüketim trendi (Mat Yüzeyler, Latte Art Formu, Isı Kontrolü, Ergonomi gibi).
-3. 3 Rakip kıyaslaması (Loveramics, notNeutral, Fellow) ve tek cümlelik 'Stratejik Konumlandırma'.
-4. Tam 3 SKU (The Core, The Canvas, The Comfort gibi) - her biri için büyük hacim etiketi ve 3 kısa madde.
-5. Saha lansman vizyonu (Görsel Kimlik, Operasyonel Verimlilik, Duyusal Temas gibi 3 sütun).
+KESİN KURALLAR:
+1. Başlıklar ve metinler sağa taşmayacak şekilde net ve vurucu olacak. Asla roman yazma.
+2. 4 Trend kartı ve koleksiyon için 4 adet 2026/27 Trend Rengi (Kalsine Bej, Mineral Adaçayı, Bazalt Antrasit, Terracotta gibi gerçek HEX kodlarıyla) belirle.
+3. 3 Rakip (Loveramics, notNeutral, Fellow) için ikişer maddelik net kıyaslama yap.
+4. Tam 3 SKU (The Core: Espresso/Cortado, The Canvas: Flat White/Latte Art, The Comfort: Büyük Kupa/Filtre) tanımla.
+5. Saha lansmanı için 3 operasyonel ilke belirle.
 """
 
 @app.get("/")
@@ -107,13 +112,12 @@ def chat(request: ChatRequest):
         )
         data = json.loads(response.text)
 
-        # Görselleri Tavily ile katı filtreli olarak çekiyoruz (Üzerinde afiş, logo, yazı olmayan saf fotoğraflar)
+        # Görselleri Tavily ile katı filtreli olarak çekiyoruz (Cam, filigran, poster ve afiş YASAK)
         if tavily_client:
-            # 1. SKU Ürün Görselleri (Sıfır metin/banner/grafik filtresi)
             sku_clean_queries = [
-                "minimalist ceramic espresso cup single shot on clean table photography -text -words -logo -poster -banner",
-                "flat white ceramic cup with latte art specialty coffee close up photography -text -words -watermark -poster",
-                "modern ceramic coffee mug on wooden table natural light editorial photography -text -words -poster -signboard"
+                "handcrafted ceramic espresso cup stoneware matte glaze studio photography -glass -transparent -watermark -text -stock",
+                "ceramic cappuccino cup latte art tulip specialty coffee photography -glass -clear -watermark -text -logo",
+                "modern minimalist ceramic coffee mug tactile stoneware table photography -glass -watermark -text -poster"
             ]
             
             for idx, sku in enumerate(data.get("sku_slides", [])):
@@ -121,10 +125,9 @@ def chat(request: ChatRequest):
                     q = sku_clean_queries[idx % len(sku_clean_queries)]
                     s_res = tavily_client.search(query=q, max_results=5, include_images=True)
                     raw_imgs = s_res.get("images", [])
-                    # Yazı/logo/vektör/afiş içeren şüpheli linkleri filtrele
                     clean_imgs = [
                         img for img in raw_imgs 
-                        if not any(bad in img.lower() for bad in ["banner", "poster", "vector", "illustration", "logo", "promo", "graphic"])
+                        if not any(bad in img.lower() for bad in ["glass", "transparent", "watermark", "dreamstime", "shutterstock", "banner", "poster", "logo"])
                     ]
                     if clean_imgs:
                         sku["image_url"] = clean_imgs[0]
@@ -133,14 +136,13 @@ def chat(request: ChatRequest):
                 except Exception:
                     pass
             
-            # 2. Lansman / Kafe Görseli (Saf mimari iç mekan, tabelasız ve yazısız)
             try:
-                q_cafe = "modern minimalist specialty coffee shop interior architecture aesthetic photography -text -words -poster -signboard -banner"
+                q_cafe = "japandi minimalist specialty coffee shop architecture interior photography -sign -text -words -poster"
                 s_res = tavily_client.search(query=q_cafe, max_results=5, include_images=True)
                 raw_imgs = s_res.get("images", [])
                 clean_imgs = [
                     img for img in raw_imgs 
-                    if not any(bad in img.lower() for bad in ["banner", "poster", "vector", "logo", "sign", "tabela", "graphic"])
+                    if not any(bad in img.lower() for bad in ["sign", "signboard", "neon", "poster", "banner", "watermark", "text"])
                 ]
                 if clean_imgs:
                     data["launch_image_url"] = clean_imgs[0]
@@ -149,7 +151,6 @@ def chat(request: ChatRequest):
             except Exception:
                 pass
 
-        # Sohbet ekranı için özet
         reply = f"""### {data.get('collection_name')}
 **{data.get('subtitle')}**
 
